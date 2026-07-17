@@ -15,7 +15,7 @@ G.dialog = (() => {
     if (cur.idx >= cur.lines.length) {
       const cb = cur.onEnd;
       cur = null;
-      G.game.popMode();
+      G.game.popMode('dialog');
       if (cb) cb();
     } else cur.charT = 0;
   };

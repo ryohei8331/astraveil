@@ -53,7 +53,7 @@ G.ui = (() => {
   };
   const dismissWorldChange = () => {
     S.worldChangeData = null;
-    G.game.popMode();
+    G.game.popMode('worldchange');
   };
 
   const sosRect = () => {

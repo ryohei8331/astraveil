@@ -199,10 +199,12 @@ G.world = (() => {
       if (rec.alive.size < want && rec.timer <= 0) {
         if (sp.boss && rec.spawned > 0) continue; // ボスは1体のみ
         const pos = randOpenPos(sp.area);
-        if (pos && G.U.dist(pos.x, pos.y, G.player.x, G.player.y) > 180) {
+        const minDist = sp.boss ? 60 : 180; // 固定ボスは近くてもスポーン(縄張りの主)
+        if (pos && G.U.dist(pos.x, pos.y, G.player.x, G.player.y) > minDist) {
           const e = spawnEnemy(sp.enemy, pos.x, pos.y, { spawnRec: rec, pack: rec });
           if (e) { rec.alive.add(e); rec.spawned++; }
-          rec.timer = sp.respawn || 20;
+          // ゾーン到着直後は素早く頭数を揃え、以後は本来のリスポーン間隔
+          rec.timer = rec.spawned < want ? 0.6 : (sp.respawn || 20);
         } else rec.timer = 1.5;
       }
     }

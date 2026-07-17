@@ -13,7 +13,15 @@ G.game = {
 
   get mode() { return this.modeStack[this.modeStack.length - 1]; },
   pushMode(m) { this.modeStack.push(m); },
-  popMode() { if (this.modeStack.length > 1) this.modeStack.pop(); },
+  // m指定時は「そのモード」だけを取り除く(ダイアログ中に世界変化が積まれる等、
+  // 入れ子順が入れ替わってもスタックが壊れないように)
+  popMode(m) {
+    if (this.modeStack.length <= 1) return;
+    if (m) {
+      const i = this.modeStack.lastIndexOf(m);
+      if (i > 0) this.modeStack.splice(i, 1);
+    } else this.modeStack.pop();
+  },
 
   newGame(name) {
     const p = G.Player.create(name);
@@ -112,7 +120,7 @@ G.game = {
   const update = dt => {
     const g = G.game;
     G.ui.update(dt);
-    if (!G.fx.freeze) G.fx.update(dt);
+    G.fx.update(dt); // freezeタイマー自体もここで進むため常に呼ぶ
 
     // フェード遷移
     if (g.fadeDir === 1) {

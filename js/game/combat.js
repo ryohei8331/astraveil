@@ -97,8 +97,9 @@ G.Combat = (() => {
   const hitPlayer = (raw, opt = {}) => {
     const p = G.player;
     if (p.dead || G.game.mode !== 'play') return;
-    if (p.invulnT > 0 || p.stealthT > 0) return;
-    if (p.airborne && !opt.aoe) { // 天狗跳び中は無敵(仕様)
+    // 地形ダメージ(pure)は回避無敵・ステルスを貫通する
+    if ((p.invulnT > 0 || p.stealthT > 0) && !opt.pure) return;
+    if (p.airborne && !opt.aoe && !opt.pure) { // 天狗跳び中は無敵(仕様)
       G.fx.float(p.x, p.y - 30, '回避', { color: '#7ee0a3', size: 12 });
       return;
     }

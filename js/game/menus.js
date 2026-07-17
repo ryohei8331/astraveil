@@ -4,7 +4,10 @@ G.menus = (() => {
   const S = { tab: 'items', page: 0, shopNpc: null, shopMode: 'buy', boardTab: 'posts', boardPage: 0, assign: null };
 
   const open = () => { S.tab = 'items'; S.page = 0; G.game.pushMode('menu'); G.audio.sfx('open'); };
-  const close = () => G.game.popMode();
+  const close = () => {
+    const m = G.game.mode;
+    G.game.popMode(['menu', 'shop', 'board'].includes(m) ? m : undefined);
+  };
   const openShop = npcDef => { S.shopNpc = npcDef; S.shopMode = 'buy'; S.page = 0; G.game.pushMode('shop'); G.audio.sfx('open'); };
   const openBoard = () => { S.boardTab = 'posts'; S.boardPage = 0; G.game.pushMode('board'); };
 
