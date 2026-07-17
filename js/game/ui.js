@@ -73,10 +73,15 @@ G.ui = (() => {
     S.chatT -= dt;
     if (S.chatT <= 0 && G.DATA.flavor && G.game.mode === 'play') {
       S.chatT = G.U.rnd(5, 14);
-      const fl = G.DATA.flavor;
-      const name = G.U.choice(fl.playerNames);
-      const tag = G.U.chance(0.4) ? G.U.choice(Object.values(fl.clanTags)) : '';
-      chat(`${tag}${name}: ${G.U.choice(fl.chatLines).replace('{name}', G.U.choice(fl.playerNames))}`);
+      // 名声の噂・クラン内会話が混ざる(社会システム)
+      const soc = G.Social && G.U.chance(0.35) ? G.Social.tickerLine() : null;
+      if (soc) chat(soc);
+      else {
+        const fl = G.DATA.flavor;
+        const name = G.U.choice(fl.playerNames);
+        const tag = G.U.chance(0.4) ? G.U.choice(Object.values(fl.clanTags)) : '';
+        chat(`${tag}${name}: ${G.U.choice(fl.chatLines).replace('{name}', G.U.choice(fl.playerNames))}`);
+      }
     }
   };
 
@@ -92,6 +97,19 @@ G.ui = (() => {
     const p = G.player;
     if (!p) return;
     ctx.save();
+    // ヨグリムの墨: 視界を奪う
+    if (G.world.S && G.world.S.inkT > 0) {
+      let px = p.x - G.cam.x, py = p.y - G.cam.y;
+      if (G.R3D && G.R3D.active()) {
+        const pr = G.R3D.project(p.x, p.y);
+        if (pr) { px = pr.x; py = pr.y; }
+      }
+      const a = Math.min(0.94, G.world.S.inkT * 0.5 + 0.3);
+      const grad = ctx.createRadialGradient(px, py, 60, px, py, 190);
+      grad.addColorStop(0, 'rgba(2,4,10,0)');
+      grad.addColorStop(1, `rgba(2,4,10,${a})`);
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    }
     ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
 
     // 左上: HP/MP/STM/満腹
@@ -149,6 +167,33 @@ G.ui = (() => {
     ctx.fillText(`${G.U.fmt(p.stella)} st`, w - 14, 54);
     ctx.textAlign = 'left';
 
+    // 酸素ゲージ(深海)
+    if (p.oxygen !== undefined) {
+      const maxO2 = 45 + p.stats.VIT * 1.5;
+      const ratio = p.oxygen / maxO2;
+      bar(ctx, w / 2 - 90, h * 0.16, 180, 10, ratio, ratio < 0.3 ? '#ff6b6b' : '#5eb9ff');
+      ctx.fillStyle = ratio < 0.3 ? '#ff8b8b' : '#cfe8ff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`酸素 ${Math.ceil(p.oxygen)}秒${ratio < 0.3 ? ' — 気泡孔へ!' : ''}`, w / 2, h * 0.16 - 5);
+      ctx.textAlign = 'left';
+    }
+    // 拍メーター(リズム戦闘)
+    if (G.BeatInfo && G.BeatInfo.active) {
+      const bw2 = 160, bx2 = w / 2 - bw2 / 2, by3 = 54;
+      ctx.fillStyle = 'rgba(20,10,30,.7)'; ctx.fillRect(bx2, by3, bw2, 14);
+      const ph = G.BeatInfo.phase;
+      const just = ph < 0.14 || ph > 0.86;
+      ctx.fillStyle = just ? '#c9a0ff' : 'rgba(201,160,255,.4)';
+      const px2 = bx2 + bw2 / 2 + Math.sin(ph * Math.PI * 2) * (bw2 / 2 - 8) * (ph < 0.5 ? 1 : -1) * 0;
+      // 中央がJUST。左右から中央へ収束するマーカー
+      const t2 = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
+      ctx.fillRect(bx2 + (bw2 / 2 - 4) * t2, by3 + 2, 4, 10);
+      ctx.fillRect(bx2 + bw2 - 4 - (bw2 / 2 - 4) * t2, by3 + 2, 4, 10);
+      ctx.fillStyle = just ? '#fff' : 'rgba(255,255,255,.5)';
+      ctx.fillRect(bx2 + bw2 / 2 - 2, by3, 4, 14);
+      ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#c9a0ff'; ctx.fillText('♪ 拍に合わせろ', w / 2, by3 - 3);
+      ctx.textAlign = 'left';
+    }
     // ボスバー
     const boss = G.world.bossActive;
     if (boss && !boss.dead) {

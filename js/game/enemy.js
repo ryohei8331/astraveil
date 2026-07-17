@@ -355,6 +355,7 @@ G.Enemy = (() => {
           e.fightStarted = true; e.aggro = true; e.target = p;
           e.dodgeBase = p.dodgeCount;
           bossStart(e);
+          if (!e.def.shadow) G.quests.flags.fenreed_met = true; // 七凶星遭遇の記録
           G.audio.sfx('howl');
           G.ui.toast('黒い狼がこちらを見ている——夜気が凍る');
         } else { idleWander(e, dt); return; }
@@ -535,6 +536,12 @@ G.Enemy = (() => {
         if (this.def.ai === 'rabbit_unique' && !this.hostile) {
           this.hostile = true;
           G.ui.toast('月兎の眼が細まる——それは、やってはいけないことだった');
+          bossStart(this);
+        }
+        if (this.def.ai === 'dragon' && !this.hostile) {
+          this.hostile = true; this.aggro = true; this.target = G.player;
+          G.ui.toast('「——良イ。選ンダノハ汝ダ。ナラバ調停者トシテ、全力デ応エヨウ」');
+          G.audio.sfx('roar'); G.fx.shake(9);
           bossStart(this);
         }
         if (this.guarded && o && !o.critLock) this.hp += Math.min(this.hpMax - this.hp, 0); // 表示用のみ
@@ -742,6 +749,40 @@ G.Enemy = (() => {
         }
         break;
       }
+      case 'dragon': {
+        const fly = e.flying ? -26 : 0;
+        // 蛇状の胴(うねり)
+        for (let i = 5; i >= 0; i--) {
+          const bx = px - Math.cos(e.facing) * i * S * 0.55 + Math.sin(G.world.animT * 2 + i) * 3;
+          const by = py + fly - 8 - Math.sin(G.world.animT * 2.4 + i * 0.8) * 3;
+          ctx.fillStyle = i % 2 ? '#c8a832' : '#e0c050';
+          ctx.beginPath(); ctx.arc(bx, by, S * (0.55 + 0.08 * (5 - i)), 0, 7); ctx.fill();
+        }
+        // 翼
+        const flap = Math.sin(G.world.animT * (e.flying ? 14 : 3)) * (e.flying ? 14 : 5);
+        ctx.fillStyle = 'rgba(224,192,80,.85)';
+        for (const sgn of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(px, py + fly - 14);
+          ctx.lineTo(px + sgn * S * 1.7, py + fly - 26 - flap);
+          ctx.lineTo(px + sgn * S * 1.1, py + fly - 6);
+          ctx.closePath(); ctx.fill();
+        }
+        // 頭・角・眼
+        const hx3 = px + Math.cos(e.facing) * S * 0.9, hy3 = py + fly - 12 + Math.sin(e.facing) * S * 0.4;
+        ctx.fillStyle = '#e0c050';
+        ctx.beginPath(); ctx.arc(hx3, hy3, S * 0.5, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff8d8';
+        ctx.beginPath(); ctx.moveTo(hx3 - 4, hy3 - S * 0.4); ctx.lineTo(hx3 - 2, hy3 - S * 0.95); ctx.lineTo(hx3 + 1, hy3 - S * 0.4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(hx3 + 3, hy3 - S * 0.4); ctx.lineTo(hx3 + 6, hy3 - S * 0.9); ctx.lineTo(hx3 + 8, hy3 - S * 0.35); ctx.fill();
+        ctx.fillStyle = e.hostile ? '#ff4a4a' : '#fff';
+        ctx.beginPath(); ctx.arc(hx3 + Math.cos(e.facing) * 4, hy3 - 2, 2.2, 0, 7); ctx.fill();
+        // 天冠(調停者の光輪)
+        ctx.strokeStyle = `rgba(255,215,94,${0.5 + 0.3 * Math.sin(G.world.animT * 3)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(px, py + fly - 30, S * 0.8, 0, 7); ctx.stroke();
+        break;
+      }
       case 'horse': {
         ctx.fillStyle = bodyCol;
         ctx.beginPath(); ctx.ellipse(px, py - 8, S * 1.5, S * 0.8, 0, 0, 7); ctx.fill();
@@ -798,5 +839,9 @@ G.Enemy = (() => {
     ctx.restore();
   };
 
-  return { create, spawnPoisonPool };
+  // データファイルから新AIアーキタイプを追加できるように公開
+  return {
+    create, spawnPoisonPool, AIS, bossStart,
+    helpers: { pickTarget, seek, effSpeed, contact, startLunge, chaseAndLunge, idleWander },
+  };
 })();

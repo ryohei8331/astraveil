@@ -8,12 +8,15 @@
   const inn = (name, price, look) => ({
     name, look,
     onTalk(npc, p) {
+      const disc = G.Social ? G.Social.discount(npc.id) : 1;
+      const cost = Math.round(price * disc);
       G.dialog.open(name, [
-        `いらっしゃい。一晩 ${price}ステラだよ。泊まっていくかい?`,
+        `いらっしゃい。一晩 ${cost}ステラ${disc < 1 ? '(なじみ割引済み)' : ''}だよ。泊まっていくかい?`,
         '(泊まると朝まで時間が進み、HP・MP・スタミナ・満腹度が全回復する)',
       ], () => {
-        if (p.stella < price) { G.ui.toast('ステラが足りない…'); return; }
-        p.stella -= price;
+        if (p.stella < cost) { G.ui.toast('ステラが足りない…'); return; }
+        p.stella -= cost;
+        if (G.Social) G.Social.onInn(npc.id);
         G.time.advanceToMorning();
         p.hp = p.hpMax; p.mp = p.mpMax; p.stm = p.stmMax; p.hunger = 100; p.statusEf = {};
         G.audio.sfx('heal');

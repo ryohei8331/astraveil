@@ -51,6 +51,23 @@ G.Combat = (() => {
     }
     // 血装駆動
     if (p.hasBuff('bloodgear') && !opt.magic) dmg *= 1.4;
+    // 修羅衆: 業を力に
+    if (G.Social && G.Social.clan === '修羅衆' && p.curse.level > 0) dmg *= 1.15;
+    // 固有スキル(生成)の乗算群
+    const painB = p.buffs.find(b => b.id === 'gen_pain');
+    if (painB) dmg *= painB.painMul;
+    const ctrB = p.buffs.find(b => b.id === 'gencounter');
+    if (ctrB && !opt.magic) {
+      dmg *= 1 + ctrB.m / 100;
+      p.buffs.splice(p.buffs.indexOf(ctrB), 1);
+      G.fx.float(e.x, e.y - 48, '返し技!', { color: '#c9a0ff', size: 13 });
+    }
+    for (const hid of p.hotbar) {
+      const sk = hid && G.DATA.skills[hid];
+      if (!sk || !sk.unique) continue;
+      if (sk.gen === 'hunger' && p.hunger <= 25 && !opt.magic) dmg *= 1 + sk.params.m1 / 100;
+      if (sk.slayerOf === e.defId) dmg *= 1 + sk.m1 / 100;
+    }
 
     // クリティカル(朧の多段はopt.critLockで初撃の判定を流用)
     let crit = false;
@@ -61,6 +78,7 @@ G.Combat = (() => {
       crit = G.U.chance(cp);
     }
     if (crit) dmg *= 1.5 + s.DEX * 0.01;
+    if (G.Growth && !opt.magic) { G.Growth.note('melee_hits'); if (crit) G.Growth.note('crits'); }
 
     // 敵防御・耐性
     dmg *= 100 / (100 + (e.def.def || 0));
@@ -69,6 +87,15 @@ G.Combat = (() => {
     if (opt.element) {
       if ((e.def.weak || []).includes(opt.element)) { dmg *= 1.6; G.fx.float(e.x, e.y - 38, '弱点!', { color: '#ffd75e', size: 12 }); }
       if ((e.def.resist || []).includes(opt.element)) dmg *= 0.5;
+    }
+    // リズム戦闘(詠奏のカンタービレ): 拍に乗った攻撃は1.5倍
+    if (G.BeatInfo && G.BeatInfo.active && !opt.magic) {
+      const ph = G.BeatInfo.phase;
+      if (ph < 0.14 || ph > 0.86) {
+        dmg *= 1.5;
+        G.fx.float(e.x, e.y - 50, '♪ JUST!', { color: '#c9a0ff', size: 14 });
+        G.audio.sfx('crit');
+      }
     }
     dmg = Math.max(1, Math.round(dmg * G.U.rnd(0.92, 1.08)));
 
@@ -98,7 +125,16 @@ G.Combat = (() => {
     const p = G.player;
     if (p.dead || G.game.mode !== 'play') return;
     // 地形ダメージ(pure)は回避無敵・ステルスを貫通する
-    if ((p.invulnT > 0 || p.stealthT > 0) && !opt.pure) return;
+    if ((p.invulnT > 0 || p.stealthT > 0) && !opt.pure) {
+      // 回避無敵中に攻撃を受け流した = 見切り(完全回避)
+      if (p.invulnT > 0 && p.dodgeT > 0) {
+        G.fx.float(p.x, p.y - 34, '見切り!', { color: '#7ee0a3', size: 12 });
+        if (G.Growth) G.Growth.note('perfect_dodges');
+        const csk = p.hotbar.map(id => id && G.DATA.skills[id]).find(sk => sk && sk.gen === 'counter');
+        if (csk) p.addBuff('gencounter', 2, { m: csk.params.m1 });
+      }
+      return;
+    }
     if (p.airborne && !opt.aoe && !opt.pure) { // 天狗跳び中は無敵(仕様)
       G.fx.float(p.x, p.y - 30, '回避', { color: '#7ee0a3', size: 12 });
       return;
@@ -114,6 +150,7 @@ G.Combat = (() => {
     dmg = Math.max(1, Math.round(dmg * G.U.rnd(0.9, 1.1)));
 
     p.hp -= dmg;
+    if (G.Growth) G.Growth.note('dmg_taken', dmg);
     p.tensen = { target: null, stacks: 0 }; // 被弾で点穿リセット
     p.invulnT = Math.max(p.invulnT, 0.5);
     p.hurtT = 0.25;

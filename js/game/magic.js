@@ -49,6 +49,7 @@ G.Magic = (() => {
     p.mp -= cost;
     let power = (1 + p.level * 0.05) * tm.m * mpScale * (starved ? 0.5 : 1);
     if (tm.label) G.fx.float(p.x, p.y - 44, tm.label, { color: tm.m > 1 ? '#ffd75e' : '#9aa3b2', size: 13 });
+    if (G.Growth) { G.Growth.note('spells'); G.Growth.note('spell_' + ch.el); }
     G.audio.sfx('magic');
     const aim = aimAngle(p);
     switch (ch.el) {

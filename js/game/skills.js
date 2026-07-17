@@ -11,6 +11,7 @@ G.Skills = (() => {
       const ax = G.input.axis();
       p.jumpDir = (ax.x || ax.y) ? Math.atan2(ax.y, ax.x) : p.facing;
       p.jumpT = 0.55; p.airborne = true;
+      if (G.Growth) G.Growth.note('jumps');
       G.audio.sfx('dodge'); G.fx.burst(p.x, p.y + 6, '#cfe8ff', 6, 80);
       return true;
     },

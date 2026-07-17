@@ -14,7 +14,10 @@ G.save = (() => {
         skillsKnown: p.skillsKnown, hotbar: p.hotbar, proficiency: p.proficiency,
         element: p.element, elements: p.elements, friends: p.friends, curse: p.curse,
         kills: p.kills, deaths: p.deaths, playT: p.playT,
+        growth: p.growth || {}, growthMi: p.growthMi || {}, growthGained: p.growthGained || {},
+        customSkills: p.customSkills || [],
       },
+      social: G.Social ? G.Social.save() : null,
       zone: G.world.zoneId,
       respawn: G.game.respawnPoint,
       quests: G.quests.save(),
@@ -40,6 +43,8 @@ G.save = (() => {
   const applyData = d => {
     const p = G.Player.create(d.player.name);
     Object.assign(p, d.player);
+    if (G.SkillForge) G.SkillForge.restore(p); // 固有スキルの再登録
+    if (G.Social && d.social) G.Social.load(d.social);
     G.quests.load(d.quests);
     G.time.load(d.time);
     G.game.respawnPoint = d.respawn;

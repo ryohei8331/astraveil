@@ -295,6 +295,106 @@ const findEnt = pred => G.world.entities.find(pred);
   frames(30);
   ok(G.game.mode === 'play' && G.world.zoneId === 'alba_town' && G.player.hp > 0, 'リスポーン');
 
+  console.log('== 行動成長 ==');
+  const agiBefore = G.player.base.AGI;
+  G.Growth.note('dodges', 5000);
+  ok(G.player.base.AGI > agiBefore, `回避の反復でAGI自然成長(${agiBefore}→${G.player.base.AGI})`);
+
+  console.log('== 固有スキル生成 ==');
+  G.Growth.note('perfect_dodges', 300);
+  ok(G.player.customSkills && G.player.customSkills.some(s => s.tpl === 'counter'), '見切り系固有スキル生成');
+  ok(!!G.DATA.skills['gen_counter'], '生成スキルがレジストリ登録済み');
+  G.Growth.note('spell_fire', 100);
+  ok(G.player.customSkills.some(s => s.tpl === 'elemsoul_fire'), '火属性の深奥を生成');
+  const csCount = G.player.customSkills.length;
+  G.save.save(1);
+  G.save.load(1); frames(10);
+  ok(G.player.customSkills.length === csCount && !!G.DATA.skills['gen_counter'], '固有スキルのセーブ/ロード永続化');
+
+  console.log('== 社会システム ==');
+  G.Social.addAff('mireille', 35);
+  ok(G.Social.tier('mireille') === 2, '好感度ティア(友人)');
+  G.Social.addFame(300);
+  ok(G.Social.fameTier() === 4, '名声ティア最大');
+  ok(typeof G.Social.titleName() === 'string' && G.Social.titleName().length > 0, `称号: ${G.Social.titleName()}`);
+  G.player.kills = 150;
+  ok(G.Social.CLANS['銀狼旅団'].cond(G.player), '銀狼旅団の加入条件');
+  const agiPre = G.player.stats.AGI;
+  G.Social.join('銀狼旅団');
+  while (G.dialog.active) G.dialog.advance();
+  ok(G.Social.clan === '銀狼旅団' && G.player.stats.AGI === agiPre + 4, 'クラン加入+特典AGI+4');
+
+  console.log('== 七凶星: 天冠のソルドレイク ==');
+  G.game.changeZone('tenkan_peak', 14, 22);
+  frames(500);
+  const drg = findEnt(e => e.defId === 'sordrake');
+  ok(!!drg, 'ソルドレイク鎮座');
+  if (drg) {
+    ok(!drg.hostile, '調停者は非敵対');
+    G.Combat.playerHit(drg, { mult: 1 });
+    ok(drg.hostile && drg.aggro, '刃を向ければ全力で応える');
+    frames(200); // 飛翔・急降下フェーズを回す
+    let guard = 0;
+    while (!drg.dead && guard++ < 500) { drg.untargetable = false; G.Combat.playerHit(drg, { mult: 60 }); }
+    frames(10);
+    ok(!!G.quests.flags.dragon_pact, '世界フラグ: 調停者の裁定');
+    if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
+    frames(5);
+  }
+
+  console.log('== 七凶星: 深潭のヨグリム ==');
+  G.quests.load({ flags: G.quests.flags, active: G.quests.active, completed: { ...G.quests.completed, q_abyss: true } });
+  ok(G.quests.conds.abyssGate(), '深潭への扉が開く条件');
+  G.game.changeZone('shintan', 17, 3);
+  frames(120);
+  ok(G.world.zoneId === 'shintan' && G.world.zone.underwater, '深海ゾーン進入');
+  ok(G.player.oxygen !== undefined, '酸素システム稼働');
+  const o2a = G.player.oxygen;
+  frames(180);
+  ok(G.player.oxygen < o2a, '酸素が減っていく');
+  G.player.x = 6.5 * 32; G.player.y = 6.5 * 32; // 気泡孔へ
+  const o2b = G.player.oxygen;
+  frames(90);
+  ok(G.player.oxygen > o2b, '気泡孔で酸素回復');
+  G.player.x = 16 * 32; G.player.y = 11 * 32;
+  frames(120);
+  const yog = findEnt(e => e.defId === 'yoglim');
+  ok(!!yog && yog.awake, 'ヨグリム覚醒');
+  ok(G.world.entities.filter(e => e.defId === 'yoglim_tentacle' && !e.dead).length >= 4, '触手4本展開');
+  frames(5);
+  ok(yog && yog.untargetable, '触手が守る間、本体は無敵');
+  if (yog) {
+    let guard = 0;
+    while (!yog.dead && guard++ < 1000) {
+      const tents = G.world.entities.filter(e => e.defId === 'yoglim_tentacle' && !e.dead);
+      if (tents.length) { for (const t2 of tents) G.Combat.playerHit(t2, { mult: 60 }); frames(2); }
+      else { G.Combat.playerHit(yog, { mult: 80 }); frames(1); }
+    }
+    ok(yog.dead && !!G.quests.flags.abyss_open, '世界フラグ: 深淵開放');
+    if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
+    frames(5);
+  }
+
+  console.log('== 七凶星: 詠奏のカンタービレ ==');
+  G.game.changeZone('kanade_arena', 10, 15);
+  frames(200);
+  const can = findEnt(e => e.defId === 'cantabile');
+  ok(!!can, 'カンタービレ存在');
+  if (can) {
+    G.player.x = can.x + 60; G.player.y = can.y;
+    frames(60);
+    ok(can.aggro, 'リズム戦闘開始');
+    frames(40);
+    ok(G.BeatInfo && G.BeatInfo.active, '拍システム稼働');
+    let guard = 0;
+    while (!can.dead && guard++ < 500) { G.Combat.playerHit(can, { mult: 60 }); }
+    frames(10);
+    ok(!!G.quests.flags.attunement, '世界フラグ: 調律');
+    if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
+    frames(5);
+  }
+  ok(G.quests.flags.starsteel_open && G.quests.flags.dragon_pact && G.quests.flags.abyss_open && G.quests.flags.attunement, '七凶星 5/7 確認(残り2体は未確認のまま)');
+
   console.log('== メニュー描画(全タブ回し) ==');
   G.menus.open();
   for (const tab of ['items', 'equip', 'stats', 'skills', 'quests', 'friends', 'system']) {

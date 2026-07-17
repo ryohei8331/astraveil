@@ -172,17 +172,23 @@ G.world = (() => {
     if (W.bossActive === e) { W.bossActive = null; G.audio.setMood(W.zone.mood || 'field'); }
     // ドロップ
     const def = e.def;
-    const luc = 1 + G.player.stats.LUC * 0.01;
+    const luc = (1 + G.player.stats.LUC * 0.01) * (G.Social && G.Social.clan === '観察会アルカ' ? 1.25 : 1);
     if (def.stella) dropPickup(e.x, e.y, 'stella', Math.round(G.U.rnd(def.stella * 0.7, def.stella * 1.3)));
     for (const d of (def.drops || [])) {
-      if (G.U.chance(Math.min(1, d.p * luc))) dropPickup(e.x, e.y, d.item, d.qty || 1);
+      if (G.U.chance(Math.min(1, d.p * luc))) {
+        dropPickup(e.x, e.y, d.item, d.qty || 1);
+        if (d.p < 0.2 && G.Growth) G.Growth.note('lucky_drops'); // レア枠を引き当てた
+      }
     }
     G.player.gainExp(def.exp || 1);
+    if (G.Growth) G.Growth.onKill(e);
     G.quests.fire('kill', { id: e.defId, e });
   };
 
   const update = dt => {
     W.animT += dt;
+    if (W.inkT > 0) W.inkT -= dt; // ヨグリムの墨
+    if (G.BeatInfo) G.BeatInfo.active = false; // maestroが毎フレーム立て直す
     // スポーン
     for (const rec of W.spawnRecs) {
       const sp = rec.def;
@@ -252,6 +258,7 @@ G.world = (() => {
     cave: { base: '#3a3440', alt: '#332d38', path: '#584e60', water: '#1e3d5c' },
     moon: { base: '#5e6b8f', alt: '#525e80', path: '#9aa3c2', water: '#3b4a80' },
     beach: { base: '#c9b380', alt: '#bfa877', path: '#d8c390', water: '#2e86ab' },
+    abyss: { base: '#1a2c40', alt: '#16263a', path: '#2c4560', water: '#0e1a2c' },
   };
   const drawTile = (ctx, c, px, py, tx, ty, pal) => {
     const h = G.U.hash2(tx, ty);
@@ -305,6 +312,16 @@ G.world = (() => {
         const ph = Math.sin(W.animT * 2 + tx * 1.3 + ty * 0.9);
         ctx.fillStyle = 'rgba(255,255,255,.10)';
         if (ph > 0.4) ctx.fillRect(px + 4 + ph * 6, py + 10 + h * 12, 12, 2);
+        break;
+      }
+      case 'o': { // 気泡孔(深海の空気溜まり)
+        ctx.fillStyle = pal.alt; ctx.fillRect(px, py, T, T);
+        ctx.fillStyle = '#2c4560'; ctx.beginPath(); ctx.arc(px + T / 2, py + T / 2, 9, 0, 7); ctx.fill();
+        for (let i = 0; i < 3; i++) {
+          const bp = (W.animT * 0.7 + h + i * 0.33) % 1;
+          ctx.fillStyle = `rgba(207,232,255,${0.7 - bp * 0.6})`;
+          ctx.beginPath(); ctx.arc(px + T / 2 + Math.sin(bp * 9 + i) * 5, py + T / 2 - bp * 26, 2.5 + i, 0, 7); ctx.fill();
+        }
         break;
       }
       case '_': ctx.fillStyle = '#0a0a12'; ctx.fillRect(px, py, T, T);

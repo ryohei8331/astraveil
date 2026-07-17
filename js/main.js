@@ -60,6 +60,7 @@ G.game = {
   onPlayerDeath(cause) {
     const p = G.player;
     p.dead = true; p.deaths++;
+    if (G.Social) G.Social.addFame(-2);
     this.deathCause = cause;
     this.deathMsg = G.DATA.flavor ? G.U.choice(G.DATA.flavor.deathMessages) : null;
     G.audio.sfx('die');
@@ -87,7 +88,7 @@ G.game = {
     if (p.hp / p.hpMax >= 0.2) { G.ui.toast('SOSはHP20%以下の窮地でのみ発信できる'); return; }
     if (!p.friends.length) { G.ui.toast('フレンドがいない…街で仲間を作っておくべきだった'); return; }
     if (p.sosCd > 0) { G.ui.toast(`SOSは再発信まであと${Math.ceil(p.sosCd)}秒`); return; }
-    p.sosCd = 180;
+    p.sosCd = G.Social && G.Social.clan === '聖環騎士団' ? 90 : 180; // 聖環: 祈りは届く
     G.audio.sfx('sos');
     G.ui.banner('SOS発信——フレンドに正確な座標が共有された');
     const n = Math.min(2, p.friends.length);

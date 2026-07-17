@@ -53,6 +53,7 @@ G.quests = (() => {
     if (r.items) for (const [iid, qty] of r.items) G.Items.give(iid, qty);
     if (r.skill) G.Skills.learn(r.skill);
     if (r.flag) setWorldFlag(r.flag);
+    if (G.Social) G.Social.addFame(q.ex ? 30 : 4, 'quest');
     fire('quest_complete', { id });
   };
 
@@ -92,10 +93,21 @@ G.quests = (() => {
       G.ui.worldChange('月兎、殞つ', ['月の兎は静かに笑い、光の粒になって消えました。', '「また満月に会おうね」']);
     },
   };
+  const FLAG_FAME = {
+    orochi_dead: 15, starsteel_open: 40, fenreed_slain: 50, lunaria_open: 25,
+    rabbit_slain: 30, dragon_pact: 60, abyss_open: 60, attunement: 60,
+  };
   const setWorldFlag = id => {
     if (S.flags[id]) return;
     S.flags[id] = true;
     if (WORLD_FLAG_FX[id]) WORLD_FLAG_FX[id]();
+    else if (G.quests && G.quests._expansionFlagFx && G.quests._expansionFlagFx[id]) G.quests._expansionFlagFx[id]();
+    if (G.Social && FLAG_FAME[id]) G.Social.addFame(FLAG_FAME[id], id);
+    if (G.Social && id === 'rabbit_slain') {
+      G.Social.addInfamy(25); // 月の兎を殺した、という事実は消えない
+      G.ui.chat('[WORLD] ※月兎の郷の空気が、少し冷たくなった気がする');
+    }
+    if (G.R3D) G.R3D.invalidate(); // 門の開閉などをメッシュに反映
   };
 
   // ---- 呪印(宵闇のフェンリード): 装備スロット封印。影を倒すと解除ではなく上位に上書き(仕様) ----

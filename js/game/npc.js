@@ -39,6 +39,18 @@ G.NPC = (() => {
       interact(p) {
         if (def.visibleCond && !G.quests.conds[def.visibleCond]()) return;
         G.audio.sfx('ui');
+        // 好感度: 挨拶や呪印への反応(会話の前に一言)
+        if (G.Social) {
+          const st = G.DATA.socialText;
+          const t = G.Social.tier(this.id);
+          if (st && p.curse.level > 0 && G.U.chance(0.3)) {
+            G.ui.toast(`${def.name}「${G.U.choice(st.cursedReactions)}」`);
+          } else if (st && t >= 1 && G.U.chance(0.35)) {
+            const g = G.U.choice(st.greetings['t' + t]).replace(/\{player\}/g, p.name);
+            G.ui.toast(`${def.name}「${g}」`);
+          }
+          G.Social.onTalk(this.id);
+        }
         if (def.onTalk) def.onTalk(this, p);
         else if (def.lines) G.dialog.open(def.name, typeof def.lines === 'function' ? def.lines(p) : def.lines);
         G.quests.fire('talk', { id: this.id });
@@ -51,7 +63,8 @@ G.NPC = (() => {
           ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
           ctx.fillText(def.emblem, px, py - 26); ctx.textAlign = 'left';
         }
-        nameplate(ctx, px, py - 30, def.name, def.nameColor || '#c8e6b0');
+        const hearts = G.Social ? '♥'.repeat(G.Social.tier(this.id)) : '';
+        nameplate(ctx, px, py - 30, def.name + (hearts ? ' ' + hearts : ''), def.nameColor || '#c8e6b0');
         // クエストマーカー(通常クエストのみ。EXは絶対に出さない/仕様)
         if (def.questMark && def.questMark()) {
           ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
@@ -99,6 +112,7 @@ G.NPC = (() => {
         if (G.quests.flags[p.flagId]) { G.ui.toast('もう掘り返した跡だ'); return; }
         if (!G.Items.count('shovel')) { G.ui.toast('地面が不自然に盛り上がっている…スコップがあれば掘れそうだ'); return; }
         G.audio.sfx('dig'); G.fx.burst(this.x, this.y, '#8a6a45', 14, 90); G.fx.shake(2);
+        if (G.Growth) G.Growth.note('digs');
         G.quests.flags[p.flagId] = true;
         G.Items.give(p.item, 1);
         G.quests.fire('dig', { id: p.flagId, item: p.item });

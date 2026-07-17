@@ -159,6 +159,18 @@ G.menus = (() => {
       ctx.fillStyle = '#9aa3b2'; ctx.font = '11px sans-serif';
       ctx.fillText(`クリ率 ${(5 + st.LUC * 0.2).toFixed(1)}% / クリ倍率 ×${(1.5 + st.DEX * 0.01).toFixed(2)} / 討伐数 ${p.kills}`, px + 16, cy2);
       ctx.fillText(`呪印: ${p.curse.level ? `Lv${p.curse.level}(${p.curse.sealed.map(G.Items.slotName).join('・')}封印 / AGI+${p.curse.sealed.length * 15}%)` : 'なし'}`, px + 16, cy2 + 18);
+      if (G.Social) {
+        ctx.fillStyle = '#ffd75e';
+        ctx.fillText(`称号: 『${G.Social.titleName()}』 名声 ${G.Social.fame}${G.Social.infamy ? ` / 悪名 ${G.Social.infamy}` : ''}`, px + 16, cy2 + 36);
+        ctx.fillStyle = '#e0c8f0';
+        ctx.fillText(`クラン: ${G.Social.clan ? `${G.Social.clan} ${G.Social.CLANS[G.Social.clan].tag}(${G.Social.CLANS[G.Social.clan].perk})` : '無所属(各街の勧誘担当へ)'}`, px + 16, cy2 + 54);
+      }
+      const gg = p.growthGained || {};
+      const gline = Object.entries(gg).filter(([, v]) => v > 0).map(([k, v]) => `${k}+${v}`).join(' ');
+      if (gline) {
+        ctx.fillStyle = '#7ee0a3';
+        ctx.fillText(`行動成長: ${gline}(体が覚えた分)`, px + 16, cy2 + 72);
+      }
     }
 
     if (S.tab === 'skills') {
@@ -298,10 +310,12 @@ G.menus = (() => {
         return it && (!it.reqFlag || G.quests.flags[it.reqFlag]);
       });
       const per = 6, pg = pager(ctx, px, py, pw, ph, stock.length, per);
+      const disc = G.Social ? G.Social.discount(def.id) : 1;
       stock.slice(pg * per, pg * per + per).forEach((id, i) => {
         const it = G.DATA.items[id];
         const y = cy + i * 62;
-        const afford = p.stella >= it.price;
+        const priceD = Math.round(it.price * disc);
+        const afford = p.stella >= priceD;
         ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(px + 12, y, pw - 24, 56);
         ctx.font = '18px sans-serif'; ctx.fillText(it.icon || '📦', px + 20, y + 32);
         ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 13px "Hiragino Kaku Gothic ProN", sans-serif';
@@ -309,11 +323,14 @@ G.menus = (() => {
         ctx.fillStyle = '#9aa3b2'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';
         ctx.fillText((it.desc || '').slice(0, 44), px + 48, y + 37);
         ctx.fillStyle = afford ? '#ffd75e' : '#ff6b6b'; ctx.font = 'bold 12px sans-serif';
-        ctx.textAlign = 'right'; ctx.fillText(`${G.U.fmt(it.price)} st`, px + pw - 100, y + 30); ctx.textAlign = 'left';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${G.U.fmt(priceD)} st${disc < 1 ? '✨' : ''}`, px + pw - 100, y + 30);
+        ctx.textAlign = 'left';
         btn(ctx, px + pw - 88, y + 13, 68, 30, '購入', () => {
-          if (p.stella < it.price) { G.ui.toast('ステラが足りない'); return; }
-          p.stella -= it.price;
+          if (p.stella < priceD) { G.ui.toast('ステラが足りない'); return; }
+          p.stella -= priceD;
           G.Items.give(id, 1);
+          if (G.Social) G.Social.onBuy(def.id);
           G.audio.sfx('coin');
         }, { active: afford });
       });

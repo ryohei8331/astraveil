@@ -146,9 +146,14 @@ void main(){
         const c = S.grid[ty][tx];
         const x0 = tx * T, x1 = x0 + T, z0 = ty * T, z1 = z0 + T;
         const base = colorOf(c, pal, tx, ty);
-        if (c === '~' || c === 'o') {
+        if (c === '~') {
           push(wpos, wcol, [[x0, -5, z0], [x1, -5, z0], [x1, -5, z1], [x0, -5, z1]], base, 1, 0.82);
           push(pos, col, [[x0, -14, z0], [x1, -14, z0], [x1, -14, z1], [x0, -14, z1]], base, 0.45);
+          continue;
+        }
+        if (c === 'o') { // 気泡孔: 床+発光ベント
+          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], base, 0.9);
+          boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, 0, 5, [0.7, 0.88, 1], 1);
           continue;
         }
         if (c === 'l') {
@@ -301,7 +306,7 @@ void main(){
     }
     drawList.sort((a, b) => b.pr.w - a.pr.w);
     for (const { e, pr } of drawList) {
-      const s = Math.min(pr.scale, 2.6);
+      const s = Math.min(pr.scale * 1.3, 3.2); // ビルボードは少し大きめに(視認性)
       ctx.setTransform(s, 0, 0, s, pr.x, pr.y);
       e.draw(ctx, { x: e.x, y: e.y }); // 自座標をcamに渡す→原点(0,0)に描かれる
     }

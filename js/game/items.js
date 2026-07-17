@@ -27,6 +27,7 @@ G.Items = (() => {
       if (it.hp) p.hp = Math.min(p.hpMax, p.hp + it.hp);
       if (it.mp) p.mp = Math.min(p.mpMax, p.mp + it.mp);
       G.audio.sfx('eat');
+      if (G.Growth) G.Growth.note('eats');
       G.ui.toast(`${it.name}を食べた(満腹度+${it.hunger || 20})`);
       return true;
     }

@@ -35,6 +35,11 @@ G.Player = (() => {
         if (this.hasBuff('bloodgear')) { s.STR = Math.round(s.STR * 1.5); s.AGI = Math.round(s.AGI * 1.3); }
         // 呪印: 封印スロット1つにつきAGI+15%(呪いは force でもある)
         if (this.curse.level > 0) s.AGI = Math.round(s.AGI * (1 + this.curse.sealed.length * 0.15));
+        // クラン特典
+        if (G.Social) {
+          if (G.Social.clan === '銀狼旅団') s.AGI += 4;
+          if (G.Social.clan === '黒鉄剣盟') s.VIT += 4;
+        }
         return s;
       },
       get hpMax() { return 100 + (this.level - 1) * 14 + this.stats.VIT * 5; },
@@ -60,6 +65,12 @@ G.Player = (() => {
         if (G.world.tileUnder(this) === 'h') v *= 0.8;
         if (this.statusEf.bind) v *= 0.35;
         if (this.statusEf.mud) v *= 0.6; // 泥潜りの振動足止め
+        if (this.hasBuff('gen_sprint')) v *= 2; // 固有: 韋駄天系
+        if (G.world.zone && G.world.zone.underwater && !this.hasBuff('antigrav')) v *= 0.78; // 水の抵抗(反重力歩法で無効)
+        if (G.time.isNight()) { // 固有: 夜駆け系パッシブ
+          const ns = this.hotbar.map(id => id && G.DATA.skills[id]).find(sk => sk && sk.gen === 'nightstride');
+          if (ns) v *= 1 + ns.params.m1 / 100;
+        }
         if (this.hasBuff('setsuna')) v *= 2.28; // 世界0.35倍の中で自分は0.8倍相当
         return v;
       },
@@ -77,6 +88,7 @@ G.Player = (() => {
       },
 
       gainExp(n) {
+        if (G.Social && G.Social.clan === '書見のロータス') n = Math.round(n * 1.2);
         this.exp += n;
         G.fx.float(this.x, this.y - 44, `+${n} EXP`, { color: '#8fd0ff', size: 11 });
         const need = l => 20 + l * l * 8;
@@ -106,7 +118,16 @@ G.Player = (() => {
           dmg = Math.max(0, alpha * (h - h0));
           text = `${h}m 落下`;
         }
+        // 固有: 受け身系はさらに半減+着地衝撃波
+        const fb = this.hotbar.map(id => id && G.DATA.skills[id]).find(sk => sk && sk.gen === 'fallbreaker');
+        if (fb) {
+          dmg *= 0.5;
+          for (const e of G.world.near(this.lastSafe.x, this.lastSafe.y, 70, x => x.kind === 'enemy' && !x.dead)) {
+            G.Combat.playerHit(e, { mult: 1.2 });
+          }
+        }
         dmg = Math.round(dmg);
+        if (G.Growth) G.Growth.note('falls');
         this.x = this.lastSafe.x; this.y = this.lastSafe.y;
         G.fx.shake(6);
         G.fx.float(this.x, this.y - 30, text, { color: '#8fd0ff', size: 12 });
@@ -142,6 +163,25 @@ G.Player = (() => {
         }
         if (this.statusEf.bind) { this.statusEf.bind.t -= dt; if (this.statusEf.bind.t <= 0) delete this.statusEf.bind; }
         if (this.statusEf.mud) { this.statusEf.mud.t -= dt; if (this.statusEf.mud.t <= 0) delete this.statusEf.mud; }
+        // 深海: 酸素管理(気泡孔'o'で回復。尽きると窒息ダメージ)
+        if (G.world.zone && G.world.zone.underwater) {
+          const maxO2 = 45 + this.stats.VIT * 1.5;
+          if (this.oxygen === undefined) this.oxygen = maxO2;
+          if (G.world.tileUnder(this) === 'o') {
+            this.oxygen = Math.min(maxO2, this.oxygen + 30 * dt);
+            if (G.U.chance(0.2)) G.fx.burst(this.x, this.y - 10, '#cfe8ff', 2, 40, { up: 60 });
+          } else {
+            this.oxygen -= dt;
+            if (this.oxygen <= 0) {
+              this.oxygen = 0;
+              this.o2Tick = (this.o2Tick || 0) - dt;
+              if (this.o2Tick <= 0) {
+                this.o2Tick = 1;
+                G.Combat.hitPlayer(Math.round(this.hpMax * 0.08), { pure: true, label: '窒息' });
+              }
+            }
+          }
+        } else this.oxygen = undefined;
         // 満腹度: 45秒で1減。20以下でSTM自然回復停止(仕様)
         this.hungerT += dt;
         if (this.hungerT >= 45) {
@@ -185,6 +225,7 @@ G.Player = (() => {
             const mul = onCliff ? 0.55 : 1;
             if (onCliff) { this.stm = Math.max(0, this.stm - 12 * pdt); this.stmDelay = 0.4; }
             G.world.moveEntity(this, ax.x * spd * mul * pdt, ax.y * spd * mul * pdt);
+            if (G.Growth) G.Growth.noteMove(spd * mul * pdt);
             this.moveX = ax.x; this.moveY = ax.y;
             this.facing = Math.atan2(ax.y, ax.x);
             this.walkT = (this.walkT || 0) + pdt;
@@ -267,6 +308,7 @@ G.Player = (() => {
           const gain = 0.35 * (1 + this.stats.TEC * 0.04) * (1 + (100 - (this.proficiency[wtype] || 0)) / 100);
           this.proficiency[wtype] = Math.min(100, (this.proficiency[wtype] || 0) + gain);
         }
+        if (this.airborne && targets.length && G.Growth) G.Growth.note('air_attacks');
         const oboro = this.hasBuff('oboro');
         for (const e of targets) {
           if (oboro) {
@@ -298,6 +340,7 @@ G.Player = (() => {
         this.driftSteer = inertia;
         this.invulnT = 0.14 + this.stats.AGI * 0.004; // AGIで無敵フレーム延長(仕様)
         this.dodgeCount++;
+        if (G.Growth) G.Growth.note('dodges');
         G.audio.sfx('dodge');
         G.fx.burst(this.x, this.y, '#cfe8ff', 5, 60);
       },
