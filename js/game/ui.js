@@ -4,7 +4,36 @@ G.ui = (() => {
   const S = {
     banners: [], toasts: [], chatLog: [], chatT: 6,
     worldChangeData: null, exFlash: 0, sosVisible: false,
-    clickables: [],
+    clickables: [], tutor: null, lagHp: null,
+  };
+
+  // ---- 段階式チュートリアル(実際に操作できたら次へ) ----
+  const TUTOR_STEPS = [
+    { key: 'move', text: '移動: WASD / 矢印キー', sub: 'スマホは画面左側をドラッグ' },
+    { key: 'attack', text: '攻撃: J か 左クリック', sub: '近くの敵へ自動で向き直る。連打で3段コンボ' },
+    { key: 'dodge', text: '回避: K か Shift', sub: '出始めは無敵。敵の攻撃に合わせると「見切り」' },
+    { key: 'skill', text: 'スキル: 1 キー', sub: 'まずは天狗跳び(大ジャンプ)を試そう' },
+    { key: 'magic', text: '魔法: L 長押し → 離す', sub: 'リングが内側の輪に重なった瞬間がベスト' },
+    { key: 'talk', text: '会話: E', sub: '「!」の付いた受付ミレイユと話そう' },
+    { key: 'menu', text: 'メニュー: M', sub: '装備・ステ振り・セーブ。閉じるのも M' },
+  ];
+  const tutorStart = () => { S.tutor = { i: 0, moveAcc: 0 }; };
+  const tutorNote = key => {
+    if (!S.tutor || !G.player || G.player.tutorDone) return;
+    const st = TUTOR_STEPS[S.tutor.i];
+    if (!st || st.key !== key) return;
+    S.tutor.i++;
+    G.audio.sfx('quest');
+    if (S.tutor.i >= TUTOR_STEPS.length) {
+      G.player.tutorDone = true;
+      S.tutor = null;
+      banner('チュートリアル完了 — 開拓の全てはあなたの手に');
+    }
+  };
+  const tutorMove = d => {
+    if (!S.tutor) return;
+    S.tutor.moveAcc += d;
+    if (S.tutor.moveAcc > 130) tutorNote('move');
   };
 
   // ---- テキスト折返し ----
@@ -277,14 +306,65 @@ G.ui = (() => {
       ctx.fillText(c.text.slice(0, 60), 14, y);
     }
 
-    // インタラクトのヒント
+    // インタラクトのマーカー(頭上▼)とヒント
     if (G.game.mode === 'play') {
-      const near = G.world.near(p.x, p.y, 52, e => e.interact && !e.dead);
-      if (near.length) {
-        ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-        const key = G.input.touchMode ? '🔍' : 'E';
-        ctx.fillText(`[${key}] 調べる / 話す`, w / 2, h * 0.68);
+      const cand = G.world.near(p.x, p.y, 150, e => e.interact && !e.dead);
+      if (cand.length) {
+        cand.sort((a, b) => G.U.dist(p.x, p.y, a.x, a.y) - G.U.dist(p.x, p.y, b.x, b.y));
+        const e = cand[0];
+        const inRange = G.U.dist(p.x, p.y, e.x, e.y) <= 66;
+        let mx, my, ms = 1;
+        if (G.R3D && G.R3D.active()) {
+          const pr = G.R3D.project(e.x, e.y);
+          if (pr) { mx = pr.x; my = pr.y - 52 * Math.min(pr.scale * 1.3, 3.2); ms = Math.min(pr.scale, 2); }
+        } else { mx = e.x - G.cam.x; my = e.y - G.cam.y - 48; }
+        if (mx !== undefined) {
+          const bob = Math.sin(Date.now() / 180) * 4;
+          ctx.fillStyle = inRange ? '#ffd75e' : 'rgba(255,215,94,.55)';
+          ctx.beginPath();
+          ctx.moveTo(mx - 7 * ms, my - 10 * ms + bob);
+          ctx.lineTo(mx + 7 * ms, my - 10 * ms + bob);
+          ctx.lineTo(mx, my + bob);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = 'rgba(20,16,24,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+          if (inRange) {
+            ctx.font = 'bold 12px "Hiragino Kaku Gothic ProN", sans-serif'; ctx.textAlign = 'center';
+            const key = G.input.touchMode ? '🔍' : 'E';
+            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+            ctx.strokeText(`${key}: 調べる / 話す`, mx, my - 18 * ms + bob);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`${key}: 調べる / 話す`, mx, my - 18 * ms + bob);
+            ctx.textAlign = 'left';
+          }
+        }
+      }
+      // キー凡例(PC・右下)
+      if (!G.input.touchMode) {
+        ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(200,216,235,.5)';
+        ctx.fillText('J:攻撃  K:回避  L長押し:魔法  U:属性  E:調べる', w - 12, h - 26);
+        ctx.fillText('1-4:スキル  M:メニュー  H:SOS', w - 12, h - 13);
         ctx.textAlign = 'left';
+      }
+      // チュートリアルカード
+      if (S.tutor && p && !p.tutorDone) {
+        const st = TUTOR_STEPS[S.tutor.i];
+        if (st) {
+          const cw = Math.min(w - 40, 380), cx = w / 2 - cw / 2, cyT = h * 0.14;
+          ctx.fillStyle = 'rgba(10,14,24,.88)';
+          ctx.beginPath(); ctx.roundRect(cx, cyT, cw, 64, 10); ctx.fill();
+          ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 10px sans-serif';
+          ctx.fillText(`はじめの一歩 ${S.tutor.i + 1}/${TUTOR_STEPS.length}`, cx + 12, cyT + 16);
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 15px "Hiragino Kaku Gothic ProN", sans-serif';
+          ctx.fillText(st.text, cx + 12, cyT + 36);
+          ctx.fillStyle = '#9aa3b2'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
+          ctx.fillText(st.sub, cx + 12, cyT + 53);
+          ctx.fillStyle = 'rgba(154,163,178,.7)'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+          ctx.fillText('スキップ', cx + cw - 10, cyT + 16);
+          ctx.textAlign = 'left';
+          addClick(cx + cw - 62, cyT + 2, 60, 20, () => { p.tutorDone = true; S.tutor = null; toast('ガイドを閉じた(操作方法はメニュー→システム)'); });
+        }
       }
     }
 
@@ -402,6 +482,7 @@ G.ui = (() => {
     banner, exBanner, toast, chat, worldChange, dismissWorldChange, sosHint,
     update, draw, drawWorldChange, wrapText, bar,
     beginClicks, addClick, handleTap,
+    tutorStart, tutorNote, tutorMove,
     get chatLog() { return S.chatLog; },
   };
 })();

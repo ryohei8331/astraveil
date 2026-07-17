@@ -210,7 +210,7 @@ void main(){
   };
 
   // ---- カメラ・投影 ----
-  const PITCH = 0.94, DIST = 400, FOVY = 1.04;
+  const PITCH = 0.86, DIST = 330, FOVY = 1.0; // 近め・低めで迫力と操作の見通しを両立
   const updateCamera = (w, h) => {
     const p = G.player;
     const sh = G.fx.shakeOffset;

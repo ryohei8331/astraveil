@@ -60,8 +60,8 @@ G.Player = (() => {
       },
       speed() {
         const s = this.stats;
-        let v = 122 * (1 + s.AGI * 0.012);
-        if (this.stm < this.stmMax * 0.25) v *= 0.72; // STM低下で挙動鈍化(仕様)
+        let v = 142 * (1 + s.AGI * 0.012);
+        if (this.stm < this.stmMax * 0.15) v *= 0.75; // STM枯渇寸前のみ鈍化(仕様の趣旨は保ちつつ快適に)
         if (G.world.tileUnder(this) === 'h') v *= 0.8;
         if (this.statusEf.bind) v *= 0.35;
         if (this.statusEf.mud) v *= 0.6; // 泥潜りの振動足止め
@@ -190,7 +190,7 @@ G.Player = (() => {
           if (this.hunger === 20) G.ui.toast('腹が減ってきた…スタミナが回復しなくなる!');
         }
         // 回復
-        if (this.stmDelay <= 0 && this.hunger > 20) this.stm = Math.min(this.stmMax, this.stm + 14 * pdt);
+        if (this.stmDelay <= 0 && this.hunger > 20) this.stm = Math.min(this.stmMax, this.stm + 19 * pdt);
         this.mp = Math.min(this.mpMax, this.mp + (2 + this.stats.TEC * 0.05) * pdt);
 
         if (G.game.mode !== 'play' || this.staggerT > 0) return;
@@ -226,6 +226,7 @@ G.Player = (() => {
             if (onCliff) { this.stm = Math.max(0, this.stm - 12 * pdt); this.stmDelay = 0.4; }
             G.world.moveEntity(this, ax.x * spd * mul * pdt, ax.y * spd * mul * pdt);
             if (G.Growth) G.Growth.noteMove(spd * mul * pdt);
+            if (G.ui.tutorMove) G.ui.tutorMove(spd * mul * pdt);
             this.moveX = ax.x; this.moveY = ax.y;
             this.facing = Math.atan2(ax.y, ax.x);
             this.walkT = (this.walkT || 0) + pdt;
@@ -242,6 +243,9 @@ G.Player = (() => {
             this.attackHitDone = true;
             this.doAttackHit();
           }
+        } else if (this.attackQueued) { // 先行入力の消化
+          this.attackQueued = false;
+          this.tryAttack();
         }
         if (G.input.pressed('attack')) this.tryAttack();
         if (G.input.pressed('dodge')) this.tryDodge();
@@ -274,10 +278,12 @@ G.Player = (() => {
       },
 
       tryAttack() {
-        if (this.attackT > 0 || this.dodgeT > 0 || this.magicCharge) return;
-        const cost = 8;
+        if (this.dodgeT > 0 || this.magicCharge) return;
+        if (this.attackT > 0) { this.attackQueued = true; return; } // 先行入力バッファ
+        const cost = 5;
         if (this.stm < cost) { G.fx.float(this.x, this.y - 30, 'スタミナ切れ', { color: '#9aa3b2', size: 11 }); return; }
-        this.stm -= cost; this.stmDelay = 0.6;
+        this.stm -= cost; this.stmDelay = 0.5;
+        if (G.ui.tutorNote) G.ui.tutorNote('attack');
         // マウス操作なら照準方向を向く(3Dモードは地面への逆投影)
         if (!G.input.touchMode && G.input.mouse.down) {
           let ax2 = G.cam.x + G.input.mouse.x, ay2 = G.cam.y + G.input.mouse.y;
@@ -286,6 +292,13 @@ G.Player = (() => {
             if (mw) { ax2 = mw.x; ay2 = mw.y; }
           }
           this.facing = G.U.angTo(this.x, this.y, ax2, ay2);
+        }
+        // ソフト自動照準: 近くの敵へ向き直る(振ったのに当たらない、を根絶)
+        const foes = G.world.near(this.x, this.y, 100, e => e.kind === 'enemy' && !e.dead && !e.untargetable && !e.dormant);
+        if (foes.length) {
+          foes.sort((a, b) => G.U.dist(this.x, this.y, a.x, a.y) - G.U.dist(this.x, this.y, b.x, b.y));
+          const cand = foes.find(e => Math.abs(G.U.angDiff(this.facing, G.U.angTo(this.x, this.y, e.x, e.y))) < 1.9);
+          if (cand) this.facing = G.U.angTo(this.x, this.y, cand.x, cand.y);
         }
         const { wtype } = G.Combat.playerAtk();
         const prof = this.proficiency[wtype] || 0;
@@ -329,9 +342,10 @@ G.Player = (() => {
 
       tryDodge() {
         if (this.dodgeT > 0 || this.attackT > 0) return;
-        const cost = 16;
+        const cost = 13;
         if (this.stm < cost) return;
-        this.stm -= cost; this.stmDelay = 0.6;
+        this.stm -= cost; this.stmDelay = 0.5;
+        if (G.ui.tutorNote) G.ui.tutorNote('dodge');
         const ax = G.input.axis();
         this.dodgeDir = (ax.x || ax.y) ? Math.atan2(ax.y, ax.x) : this.facing;
         const inertia = this.hotbar.includes('inertia');
@@ -346,9 +360,10 @@ G.Player = (() => {
       },
 
       tryInteract() {
-        const list = G.world.near(this.x, this.y, 52, e => e.interact && !e.dead);
+        const list = G.world.near(this.x, this.y, 66, e => e.interact && !e.dead);
         if (!list.length) return;
         list.sort((a, b) => G.U.dist(this.x, this.y, a.x, a.y) - G.U.dist(this.x, this.y, b.x, b.y));
+        if (G.ui.tutorNote && list[0].kind === 'npc') G.ui.tutorNote('talk');
         list[0].interact(this);
       },
 

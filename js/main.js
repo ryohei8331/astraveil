@@ -40,6 +40,7 @@ G.game = {
     this.modeStack = ['play'];
     this.timeScale = 1;
     G.world.load('alba_town', 12, 14);
+    G.ui.tutorStart();
     G.ui.chat(`[SYSTEM] ようこそ「ヴェイルノート」へ。開拓者 ${p.name} の記録を開始します`);
     setTimeout(() => {
       G.dialog.open('？？？', [
@@ -147,6 +148,9 @@ G.game = {
       if (g.fade <= 0) g.fadeDir = 0;
     }
 
+    // メニュー系はEsc/Mでも閉じる・死亡画面はキーで復帰(操作感)
+    if (['menu', 'shop', 'board'].includes(g.mode) && G.input.pressed('menu')) { G.menus.close(); return; }
+    if (g.mode === 'dead' && (G.input.pressed('interact') || G.input.pressed('attack'))) { g.respawn(); return; }
     if (g.mode === 'dialog') { G.dialog.update(dt); return; }
     if (g.mode !== 'play' || G.fx.freeze) return;
 
@@ -176,7 +180,7 @@ G.game = {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     G.ui.beginClicks();
 
-    if (g.mode === 'title' || (g.modeStack[0] === 'title' && ['board', 'menu'].includes(g.mode))) {
+    if (g.mode === 'title' || (g.modeStack[0] === 'title' && ['board', 'menu', 'dialog'].includes(g.mode))) {
       if (G.R3D) G.R3D.hide();
       ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
       G.title.draw(ctx, w, h);

@@ -15,7 +15,7 @@ G.save = (() => {
         element: p.element, elements: p.elements, friends: p.friends, curse: p.curse,
         kills: p.kills, deaths: p.deaths, playT: p.playT,
         growth: p.growth || {}, growthMi: p.growthMi || {}, growthGained: p.growthGained || {},
-        customSkills: p.customSkills || [],
+        customSkills: p.customSkills || [], tutorDone: !!p.tutorDone,
       },
       social: G.Social ? G.Social.save() : null,
       zone: G.world.zoneId,

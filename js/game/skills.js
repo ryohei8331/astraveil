@@ -103,6 +103,7 @@ G.Skills = (() => {
     if (c.mp && p.mp < c.mp) { G.fx.float(p.x, p.y - 34, 'MP不足', { color: '#9aa3b2', size: 11 }); return; }
     if (c.hpPct && p.hp <= p.hpMax * c.hpPct / 100 + 1) { G.fx.float(p.x, p.y - 34, 'HPが足りない', { color: '#ff6b6b', size: 11 }); return; }
     if (sk.use(p)) {
+      if (G.ui.tutorNote) G.ui.tutorNote('skill');
       if (c.stm) { p.stm -= c.stm; p.stmDelay = 0.6; }
       if (c.mp) p.mp -= c.mp;
       if (c.hpPct) p.hp -= Math.round(p.hpMax * c.hpPct / 100);
