@@ -423,7 +423,7 @@
       },
       run: d => {
         G.quests.flags.melody_day = G.time.S.day;
-        setTimeout(() => {
+        G.game.defer(2.0, () => {
           if (G.game.mode !== 'play') return;
           const p = G.player;
           G.ui.chat('[WORLD] どこかから、旋律が聞こえる…');
@@ -447,7 +447,7 @@
               ctx.fillText('旋律を追う', px - 20, py + 12);
             },
           });
-        }, 2000);
+        });
       },
     },
     { // ソルドレイクに挑んだ瞬間の演出

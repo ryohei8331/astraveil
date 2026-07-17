@@ -19,6 +19,17 @@ G.game = {
   fade: 0, fadeDir: 0, pendingZone: null,
   autosaveT: 0,
 
+  // シミュレーション時刻ベースの遅延実行(実時間setTimeoutはレースの温床なので使わない)
+  timers: [],
+  defer(sec, fn) { this.timers.push({ t: sec, fn }); },
+  tickTimers(dt) {
+    for (let i = this.timers.length - 1; i >= 0; i--) {
+      const tm = this.timers[i];
+      tm.t -= dt;
+      if (tm.t <= 0) { this.timers.splice(i, 1); try { tm.fn(); } catch (e) { console.error(e); } }
+    }
+  },
+
   get mode() { return this.modeStack[this.modeStack.length - 1]; },
   pushMode(m) { this.modeStack.push(m); },
   // m指定時は「そのモード」だけを取り除く(ダイアログ中に世界変化が積まれる等、
@@ -42,13 +53,13 @@ G.game = {
     G.world.load('alba_town', 12, 14);
     G.ui.tutorStart();
     G.ui.chat(`[SYSTEM] ようこそ「ヴェイルノート」へ。開拓者 ${p.name} の記録を開始します`);
-    setTimeout(() => {
+    this.defer(0.6, () => {
       G.dialog.open('？？？', [
         `${p.name}、聞こえるか。ここが「アストラヴェイル」——星鋼紀が崩壊して千年後の世界だ。`,
         'まずは広場のギルド受付ミレイユに話を聞くといい。それと、掲示板は読んでおけ。攻略情報から都市伝説まで何でも書いてある。',
         '……ああ、そうだ。このゲーム、攻略サイトに載っていないことが本当に多い。「妙なこと」を試した奴だけが辿り着ける場所がある、とだけ言っておく。',
       ], () => G.quests.start('q_first_steps'));
-    }, 600);
+    });
   },
 
   changeZone(to, tx, ty) {
@@ -96,14 +107,14 @@ G.game = {
     const n = Math.min(2, p.friends.length);
     const picks = [...p.friends].sort(() => Math.random() - 0.5).slice(0, n);
     picks.forEach((f, i) => {
-      setTimeout(() => {
+      this.defer(0.8 + i * 0.7, () => {
         if (G.game.mode !== 'play') return;
         const ally = G.NPC.createAlly(f);
         G.world.add(ally);
         G.fx.burst(ally.x, ally.y, '#8fd0ff', 16, 130);
         G.audio.sfx('warp');
         G.ui.chat(`${f.name}: ${f.greeting}`);
-      }, 800 + i * 700);
+      });
     });
   },
 };
@@ -156,6 +167,7 @@ G.game = {
     if (g.mode !== 'play' || G.fx.freeze) return;
 
     const wdt = dt * g.timeScale;
+    g.tickTimers(wdt);
     G.time.update(wdt);
     G.world.update(wdt);
     G.fx.ambientUpdate(wdt); // 環境パーティクル(蛍・花びら・泡…)

@@ -5,6 +5,13 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+// ---- 乱数を固定(フレーク排除・再現可能なテストに) ----
+let __seed = 123456789;
+Math.random = () => {
+  __seed = (__seed * 1103515245 + 12345) & 0x7fffffff;
+  return __seed / 0x7fffffff;
+};
+
 // ---- ブラウザAPIスタブ ----
 const noop = () => { };
 const ctxProxy = new Proxy({}, {
@@ -54,7 +61,9 @@ const ok = (cond, label) => {
   if (cond) console.log('  ok:', label);
   else { failures++; console.error('  FAIL:', label); }
 };
-let simT = 0;
+// main.jsのループは起動時のperformance.now()を基準にするため、同じ起点から刻む
+// (0起点だと起動ジッター分のフレームが食われ、実行ごとに挙動がズレる)
+let simT = performance.now();
 const frames = n => { for (let i = 0; i < n; i++) { simT += 16.7; rafCb(simT); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const findEnt = pred => G.world.entities.find(pred);
@@ -71,7 +80,7 @@ const findEnt = pred => G.world.entities.find(pred);
   ok(G.world.zoneId === 'alba_town', 'アルバの街で開始');
   ok(G.world.entities.some(e => e.kind === 'npc'), 'NPC配置');
   ok(G.world.entities.some(e => e.kind === 'fake'), '偽プレイヤー配置');
-  await sleep(700); frames(5);
+  frames(50);
   ok(G.game.mode === 'dialog', '導入ダイアログ表示');
   while (G.dialog.active) G.dialog.advance();
   frames(5);
@@ -227,7 +236,7 @@ const findEnt = pred => G.world.entities.find(pred);
   // 影を倒すと解除ではなく上書き(仕様)
   const shadow = G.world.spawnEnemy('shadow_fenreed', G.player.x + 300, G.player.y);
   while (!shadow.dead) G.Combat.playerHit(shadow, { mult: 50 });
-  await sleep(900); frames(10);
+  frames(60);
   ok(G.player.curse.level === 2, '影討伐→上位呪印に上書き(Lv2)');
 
   console.log('== EX『月兎抄』フルフロー ==');
@@ -246,7 +255,7 @@ const findEnt = pred => G.world.entities.find(pred);
   ok(!!towa, '遠環存在');
   towa.interact(G.player);
   while (G.dialog.active) G.dialog.advance();
-  await sleep(600); frames(5);
+  frames(40);
   ok(!!G.quests.active.epic_lunahare, 'EXシナリオ発火');
   const dig = findEnt(e => e.kind === 'prop' && e.cond === 'exRabbitActive');
   ok(!!dig, 'Ω機関の発掘地点出現');
@@ -282,7 +291,7 @@ const findEnt = pred => G.world.entities.find(pred);
   G.player.hp = G.player.hpMax * 0.1;
   G.player.sosCd = 0;
   G.game.trySOS();
-  await sleep(1000); frames(30);
+  frames(130);
   ok(findEnt(e => e.kind === 'ally'), 'フレンド駆けつけ');
   G.player.hp = G.player.hpMax;
 
@@ -342,6 +351,7 @@ const findEnt = pred => G.world.entities.find(pred);
     frames(5);
   }
 
+  console.log('DEBUG modeStack:', JSON.stringify(G.game.modeStack));
   console.log('== 七凶星: 深潭のヨグリム ==');
   G.quests.load({ flags: G.quests.flags, active: G.quests.active, completed: { ...G.quests.completed, q_abyss: true } });
   ok(G.quests.conds.abyssGate(), '深潭への扉が開く条件');

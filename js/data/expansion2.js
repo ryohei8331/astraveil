@@ -133,7 +133,7 @@
     },
     run: () => {
       G.quests.flags.kagami_day = G.time.S.day;
-      setTimeout(() => {
+      G.game.defer(3.0, () => {
         if (G.game.mode !== 'play' || !G.world.zone.town) return;
         const p = G.player;
         const pos = G.world.randOpenPos([2, 2, 18, 12]) || { x: p.x + 80, y: p.y };
@@ -168,7 +168,7 @@
           },
         });
         G.ui.chat(`[SYSTEM] 警告: 重複したプレイヤーIDを検出しました…… 対象: ${p.name}`);
-      }, 3000);
+      });
     },
   });
 

@@ -60,9 +60,15 @@ attribute vec2 aP; varying vec2 vP;
 void main(){ vP = aP; gl_Position = vec4(aP, 0.9995, 1.0); }`;
   const FSKY = `
 precision mediump float; varying vec2 vP;
-uniform vec3 uZen, uHor, uCelCol;
-uniform vec2 uCel; uniform float uCelR, uStar, uAspect;
+uniform vec3 uZen, uHor, uCelCol, uCloudCol;
+uniform vec2 uCel; uniform float uCelR, uStar, uAspect, uSkyT, uCloudAmt;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 void main(){
   float ty = clamp(vP.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 col = mix(uHor, uZen, pow(ty, 1.35));
@@ -74,10 +80,16 @@ void main(){
     vec2 g = floor(sp * 85.0);
     float h = hash(g);
     if (h > 0.994) {
-      vec2 c = (g + 0.5) / 85.0;
-      float dd = distance(sp, c);
+      vec2 c2 = (g + 0.5) / 85.0;
+      float dd = distance(sp, c2);
       col += vec3(1.0) * uStar * smoothstep(0.0045, 0.0, dd) * (0.4 + 0.6 * hash(g + 7.0));
     }
+  }
+  if (uCloudAmt > 0.01) { // ゆっくり流れる雲(二層ノイズ)
+    float cl = vnoise(sp * 2.6 + vec2(uSkyT * 0.012, 0.0)) * 0.62
+             + vnoise(sp * 6.5 + vec2(uSkyT * 0.03, 3.7)) * 0.38;
+    cl = smoothstep(0.52, 0.78, cl) * smoothstep(0.34, 0.62, ty) * uCloudAmt;
+    col = mix(col, uCloudCol, cl * 0.9);
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -249,6 +261,20 @@ void main(){
         if (c === '~') {
           push(wpos, wcol, [[x0, -5, z0], [x1, -5, z0], [x1, -5, z1], [x0, -5, z1]], base, 1, 0.82);
           push(pos, col, [[x0, -14, z0], [x1, -14, z0], [x1, -14, z1], [x0, -14, z1]], base, 0.45);
+          // 水際の泡(岸に接する辺に白い縁)
+          {
+            const foam = [0.88, 0.94, 0.99];
+            const solidN = (dx2, dz2) => {
+              const tX = tx + dx2, tY = ty + dz2;
+              if (tY < 0 || tX < 0 || tY >= S.th || tX >= S.tw) return false;
+              const nc = S.grid[tY][tX];
+              return nc !== '~' && nc !== 'o' && nc !== '_' && nc !== ' ';
+            };
+            if (solidN(0, -1)) push(wpos, wcol, [[x0, -4.4, z0], [x1, -4.4, z0], [x1, -4.4, z0 + 4], [x0, -4.4, z0 + 4]], foam, 1, 0.5);
+            if (solidN(0, 1)) push(wpos, wcol, [[x0, -4.4, z1 - 4], [x1, -4.4, z1 - 4], [x1, -4.4, z1], [x0, -4.4, z1]], foam, 1, 0.5);
+            if (solidN(-1, 0)) push(wpos, wcol, [[x0, -4.4, z0], [x0 + 4, -4.4, z0], [x0 + 4, -4.4, z1], [x0, -4.4, z1]], foam, 1, 0.5);
+            if (solidN(1, 0)) push(wpos, wcol, [[x1 - 4, -4.4, z0], [x1, -4.4, z0], [x1, -4.4, z1], [x1 - 4, -4.4, z1]], foam, 1, 0.5);
+          }
           continue;
         }
         if (c === 'o') { // 気泡孔: 床+発光ベント
@@ -270,11 +296,41 @@ void main(){
         const c00 = cornerH(tx, ty), c10 = cornerH(tx + 1, ty), c11 = cornerH(tx + 1, ty + 1), c01 = cornerH(tx, ty + 1);
         const hAvg = (c00 + c10 + c11 + c01) / 4;
         const hMin = Math.min(c00, c10, c11, c01);
+        // 高い物が南東へ落とす影(半透明パスで描く)
+        const castShadow = (alpha, inset = 0) => push(wpos, wcol, [
+          [x0 + inset + 9, hAvg + 0.5, z0 + inset + 9],
+          [x1 + 12, hAvg + 0.5, z0 + inset + 9],
+          [x1 + 12, hAvg + 0.5, z1 + 12],
+          [x0 + inset + 9, hAvg + 0.5, z1 + 12],
+        ], [0, 0, 0], 1, alpha);
         if (hgt === 0) {
           const ao = floorAO(tx, ty);
-          const hs = [c00, c10, c11, c01].map((hh, i2) => ao[i2] * (1 + hh * 0.018)); // 丘の上は少し明るく
+          // 斜面ライティング(北西上空からの太陽)+丘の上は明るく
+          const dhdx = ((c10 + c11) - (c00 + c01)) / (2 * T);
+          const dhdz = ((c01 + c11) - (c00 + c10)) / (2 * T);
+          const slope = G.U.clamp(1 - (dhdx + dhdz) * 1.35, 0.74, 1.24);
+          const hs = [c00, c10, c11, c01].map((hh, i2) => ao[i2] * slope * (1 + hh * 0.014));
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], base, hs);
           const h2 = G.U.hash2(tx, ty);
+          // 草の穂(地面に立体のディテールを散らす)
+          if ((c === '.' || c === ',') && h2 > 0.52) {
+            const gx2 = x0 + ((h2 * 91) % 24) + 4, gz2 = z0 + ((h2 * 57) % 24) + 4;
+            boxAtY(pos, col, gx2, gz2, 1.8, hAvg, hAvg + 4.5 + (h2 * 9) % 4, [base[0] * 0.72, base[1] * 0.92, base[2] * 0.72], 1);
+            if (h2 > 0.9) boxAtY(pos, col, gx2 + 6, gz2 - 5, 1.6, hAvg, hAvg + 4, [base[0] * 0.8, base[1] * 1.0, base[2] * 0.8], 1);
+          }
+          // 道の縁を隣の草色で馴染ませる(タイルの境界線を消す)
+          if (c === '=' ) {
+            const GRASSY = new Set(['.', ',', 'h', 'F']);
+            const gcol = hexRGB(pal[0]).map(v => v * 0.97);
+            const nb = (dx2, dz2) => {
+              const tX = tx + dx2, tY = ty + dz2;
+              return tY >= 0 && tX >= 0 && tY < S.th && tX < S.tw && GRASSY.has(S.grid[tY][tX]);
+            };
+            if (nb(0, -1)) push(pos, col, [[x0, c00 + 0.3, z0], [x1, c10 + 0.3, z0], [x1, c10 + 0.3, z0 + 5], [x0, c00 + 0.3, z0 + 5]], gcol, 1);
+            if (nb(0, 1)) push(pos, col, [[x0, c01 + 0.3, z1 - 5], [x1, c11 + 0.3, z1 - 5], [x1, c11 + 0.3, z1], [x0, c01 + 0.3, z1]], gcol, 1);
+            if (nb(-1, 0)) push(pos, col, [[x0, c00 + 0.3, z0], [x0 + 5, c00 + 0.3, z0], [x0 + 5, c01 + 0.3, z1], [x0, c01 + 0.3, z1]], gcol, 1);
+            if (nb(1, 0)) push(pos, col, [[x1 - 5, c10 + 0.3, z0], [x1, c10 + 0.3, z0], [x1, c11 + 0.3, z1], [x1 - 5, c11 + 0.3, z1]], gcol, 1);
+          }
           if (c === 'h' && h2 > 0.3) boxAtY(pos, col, x0 + 8 + h2 * 10, z0 + 8 + (1 - h2) * 10, 6, hAvg, hAvg + 7, [0.12, 0.3, 0.12], 1);
           if (c === 'F') boxAtY(pos, col, x0 + 8 + h2 * 14, z0 + 8 + (1 - h2) * 12, 4, hAvg, hAvg + 6, hexRGB(['#ff8fa3', '#ffd75e', '#c9a0ff', '#ffffff'][Math.floor(h2 * 4)]), 1);
           if (c === 'g') boxAtY(pos, col, x0 + T / 2 - 3, z0 + T / 2 - 3, 6, hAvg, hAvg + 2.5, [0.36, 0.93, 0.83], 1);
@@ -294,6 +350,7 @@ void main(){
           boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, hAvg, hAvg + 16, [0.35, 0.27, 0.19], 1);
           boxAtY(pos, col, x0 + T / 2 - (T - 6) * cs / 2, z0 + T / 2 - (T - 6) * cs / 2, (T - 6) * cs, hAvg + 13, hAvg + 25 + j * 4, canopy, 1);
           boxAtY(pos, col, x0 + T / 2 - (T - 16) * cs / 2, z0 + T / 2 - (T - 16) * cs / 2, (T - 16) * cs, hAvg + 25 + j * 4, hAvg + hTop, [Math.min(1, canopy[0] * 1.2), Math.min(1, canopy[1] * 1.2), Math.min(1, canopy[2] * 1.2)], 1);
+          castShadow(0.14, 3);
         } else if (c === 'w') {
           // 建物: 壁+張り出した軒+切妻風の屋根(ドラクエ的な家並みへ)
           const roofC = zn.biome === 'ruins' ? [0.30, 0.34, 0.42] : [0.66, 0.30, 0.22];
@@ -313,6 +370,7 @@ void main(){
           push(pos, col, [[x1 + 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z0 - 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.72);
           push(pos, col, [[x0 - 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z1 + 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x0 + 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
           push(pos, col, [[x1 + 3, hMin + 24, z1 + 3], [x1 + 3, hMin + 24, z0 - 3], [x1 - 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
+          castShadow(0.22);
         } else if (c === 'D' || c === 'M') {
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), 1);
           boxAtY(pos, col, x0, z0 + 10, 7, hMin - 1, hMin + hgt, base, 1);
@@ -320,6 +378,7 @@ void main(){
           boxAtY(pos, col, x0, z0 + 10, T, hMin + hgt - 8, hMin + hgt, c === 'M' ? [0.82, 0.85, 1] : base, 1);
         } else {
           boxAtY(pos, col, x0, z0, T, hMin - 1, hMin + hgt, base, 1);
+          castShadow(0.17);
         }
       }
     }
@@ -453,6 +512,10 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(skyProg, 'uCelR'), celR);
     gl.uniform1f(gl.getUniformLocation(skyProg, 'uStar'), starAmt);
     gl.uniform1f(gl.getUniformLocation(skyProg, 'uAspect'), cam.aspect);
+    gl.uniform1f(gl.getUniformLocation(skyProg, 'uSkyT'), G.world.animT);
+    gl.uniform1f(gl.getUniformLocation(skyProg, 'uCloudAmt'), (und || zone.dark) ? 0 : 0.9);
+    const cw2 = Math.max(0.18, 1 - dark * 0.8);
+    gl.uniform3fv(gl.getUniformLocation(skyProg, 'uCloudCol'), [cw2, cw2, Math.min(1, cw2 * 1.05)]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.depthMask(true);
 

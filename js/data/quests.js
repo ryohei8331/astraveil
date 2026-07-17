@@ -88,7 +88,7 @@
       check: d => d.id === 'towa'
         && G.quests.conds.fullMoonNight() && G.quests.conds.unarmed()
         && !G.quests.active.epic_lunahare && !G.quests.completed.epic_lunahare,
-      run: () => setTimeout(() => G.quests.start('epic_lunahare'), 400),
+      run: () => G.game.defer(0.4, () => G.quests.start('epic_lunahare')),
     },
     {
       id: 'trig_hisono', on: 'enter',
@@ -98,7 +98,7 @@
         G.ui.chat('[SYSTEM] 未踏エリアを発見: 開拓ボーナス +500ステラ');
         G.player.stella += 500;
         if (G.player.equipment.weapon) {
-          setTimeout(() => G.ui.toast('花々の奥に、誰かの気配がする。……だが、姿は見えない'), 2500);
+          G.game.defer(2.5, () => G.ui.toast('花々の奥に、誰かの気配がする。……だが、姿は見えない'));
         }
       },
     },
@@ -107,11 +107,11 @@
       check: d => d.id === 'shadow_fenreed' && G.player.curse.level > 0,
       run: () => {
         // 仕様: 影を倒しても呪印は解除されず、上位呪印に「上書き」される
-        setTimeout(() => {
+        G.game.defer(0.7, () => {
           G.ui.toast('呪印が消える——かと思われた。だが');
           G.quests.applyCurse();
           G.ui.chat('[SYSTEM] 上位存在のマーキングが更新されました');
-        }, 700);
+        });
       },
     },
     {

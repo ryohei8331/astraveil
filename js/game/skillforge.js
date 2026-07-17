@@ -24,14 +24,14 @@ G.SkillForge = (() => {
       desc: s => `跳躍しながら振り下ろす空戦技。着地点に${s.m1}%威力の衝撃波。あなたが空中で戦い続けた証。`,
       use: (p, s) => {
         p.jumpT = 0.4; p.jumpDir = p.facing; p.airborne = true;
-        setTimeout(() => {
+        G.game.defer(0.43, () => {
           if (p.dead) return;
           G.fx.shake(5); G.fx.ring(p.x, p.y, '#8fd0ff', 70, 0.4); G.audio.sfx('roar');
           for (const e of G.world.near(p.x, p.y, 75, x => x.kind === 'enemy' && !x.dead)) {
             G.Combat.playerHit(e, { mult: s.m1 / 100 });
           }
           G.world.notifyNoise(p.x, p.y, 200);
-        }, 430);
+        });
         return true;
       },
     },

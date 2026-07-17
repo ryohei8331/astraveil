@@ -330,7 +330,7 @@ G.Player = (() => {
             const behind = Math.abs(G.U.angDiff(e.facing || 0, G.U.angTo(e.x, e.y, this.x, this.y))) > Math.PI * 0.6;
             const crit = G.U.chance(0.05 + s.LUC * 0.002 + (behind ? 0.10 + s.DEX * 0.004 : 0));
             for (let i = 0; i < 3; i++) {
-              setTimeout(() => { if (!e.dead) G.Combat.playerHit(e, { mult: 0.45 * stepMul, critLock: crit }); }, i * 55);
+              G.game.defer(i * 0.055, () => { if (!e.dead) G.Combat.playerHit(e, { mult: 0.45 * stepMul, critLock: crit }); });
             }
           } else {
             G.Combat.playerHit(e, { mult: stepMul });
