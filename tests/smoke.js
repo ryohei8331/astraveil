@@ -233,7 +233,7 @@ const findEnt = pred => G.world.entities.find(pred);
   console.log('== EX『月兎抄』フルフロー ==');
   // 満月の夜にセット(day5 → 月齢4=満月)
   G.time.S.day = 5;
-  G.time.S.t = 5 * G.time.DAY_LEN * 0 + G.time.DAY_LEN * 0.7; // 夜
+  G.time.S.t = 5 * G.time.DAY_LEN * 0 + G.time.DAY_LEN * 0.92; // 夜
   ok(G.time.isFullMoon() && G.time.isNight(), '満月の夜を設定');
   G.game.changeZone('hisono', 9, 13);
   frames(30);
@@ -435,10 +435,10 @@ const findEnt = pred => G.world.entities.find(pred);
   console.log('== 七凶星7体目: 終末のアーカイヴ ==');
   G.quests.flags.fenreed_met = true;
   G.time.S.day = 9; // 月齢0(新月)
-  G.time.S.t = 9 * 0 + G.time.DAY_LEN * 0.7; // 夜
+  G.time.S.t = 9 * 0 + G.time.DAY_LEN * 0.92; // 夜
   ok(G.time.moonPhase() === 0 && G.time.isNight(), '新月の夜');
   ok(G.quests.conds.archiveGate(), '最終ゲート開放条件');
-  G.game.changeZone('archive_layer', 12, 11);
+  G.game.changeZone('archive_layer', 12, 16);
   frames(300);
   const ar = findEnt(e => e.defId === 'archive');
   ok(!!ar, 'アーカイヴ出現');

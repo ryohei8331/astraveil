@@ -338,7 +338,7 @@ void main(){
     const frac = G.time.frac();
     const dark = zone.dark ? 0.8 : G.time.darkness();
     const und = zone.underwater;
-    const dusk = Math.max(0, 1 - Math.abs(frac - 0.575) / 0.055) + Math.max(0, 1 - Math.abs(frac - 0.06) / 0.05);
+    const dusk = Math.max(0, 1 - Math.abs(frac - 0.81) / 0.06) + Math.max(0, 1 - Math.abs(frac - 0.18) / 0.05);
     const L3 = (a, b, t2) => [G.U.lerp(a[0], b[0], t2), G.U.lerp(a[1], b[1], t2), G.U.lerp(a[2], b[2], t2)];
     let zen = L3([0.30, 0.52, 0.86], [0.015, 0.03, 0.09], G.U.clamp(dark / 0.62, 0, 1));
     let hor = L3([0.72, 0.84, 0.96], [0.09, 0.11, 0.20], G.U.clamp(dark / 0.62, 0, 1));
@@ -349,13 +349,13 @@ void main(){
     // 太陽と月(月は月齢で明るさが変わる)
     let celPos = [0, -2], celCol = [0, 0, 0], celR = 0.0;
     if (!und && !zone.dark) {
-      const dayT = (frac - 0.05) / 0.5;
+      const dayT = (frac - 0.20) / 0.60; // 太陽は04:48-19:12の弧
       if (dayT >= 0 && dayT <= 1) {
         celPos = [G.U.lerp(-0.85, 0.85, dayT), Math.sin(dayT * Math.PI) * 0.75 - 0.18];
         celCol = [1.0, 0.9 - 0.25 * dusk, 0.62 - 0.22 * dusk];
         celR = 0.08;
       } else {
-        const nightT = frac >= 0.55 ? (frac - 0.55) / 0.5 : (frac + 0.45) / 0.5;
+        const nightT = frac >= 0.80 ? (frac - 0.80) / 0.40 : (frac + 0.20) / 0.40;
         const mb = 0.35 + 0.65 * (1 - Math.abs(G.time.moonPhase() - 4) / 4);
         celPos = [G.U.lerp(-0.85, 0.85, nightT), Math.sin(nightT * Math.PI) * 0.7 - 0.12];
         celCol = [0.72 * mb, 0.76 * mb, 0.95 * mb];

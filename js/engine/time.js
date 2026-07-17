@@ -4,7 +4,7 @@ G.time = (() => {
   const DAY_LEN = 720; // 実時間12分 = ゲーム内1日
   const S = { t: DAY_LEN * 0.30, day: 1 }; // 朝スタート
   const frac = () => (S.t % DAY_LEN) / DAY_LEN;
-  const isNight = () => { const f = frac(); return f >= 0.58 || f < 0.04; };
+  const isNight = () => { const f = frac(); return f >= 0.84 || f < 0.18; }; // 20:10頃〜04:20頃
   const moonPhase = () => ((S.day - 1) % 8); // 0新月 → 4満月
   const isFullMoon = () => moonPhase() === 4;
   const MOON_NAMES = ['新月', '三日月', '上弦', '十日夜', '満月', '寝待月', '下弦', '有明月'];
@@ -13,13 +13,13 @@ G.time = (() => {
     const h = Math.floor(frac() * 24), m = Math.floor((frac() * 24 - h) * 60);
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
-  // 夜の暗さ 0..0.62(満月の夜はやや明るい)
+  // 夜の暗さ 0..0.62(満月の夜はやや明るい)。夕暮れ18時台→夜20時半→夜明け3時半
   const darkness = () => {
     const f = frac();
     let d = 0;
-    if (f >= 0.52 && f < 0.62) d = (f - 0.52) / 0.10;       // 夕暮れ
-    else if (f >= 0.62 || f < 0.02) d = 1;                   // 夜
-    else if (f >= 0.02 && f < 0.10) d = 1 - (f - 0.02) / 0.08; // 夜明け
+    if (f >= 0.76 && f < 0.86) d = (f - 0.76) / 0.10;          // 夕暮れ(18:14-20:38)
+    else if (f >= 0.86 || f < 0.14) d = 1;                     // 夜
+    else if (f >= 0.14 && f < 0.22) d = 1 - (f - 0.14) / 0.08; // 夜明け(03:21-05:16)
     return d * (isFullMoon() ? 0.45 : 0.62);
   };
   const update = dt => {
