@@ -40,7 +40,10 @@ G.title = (() => {
   };
 
   const draw = (ctx, w, h) => {
-    S.t += 1 / 60;
+    const now = performance.now();
+    const rdt = S._last ? Math.min(0.25, (now - S._last) / 1000) : 1 / 60;
+    S._last = now;
+    S.t += rdt;
     ensureStars(w, h);
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, '#060a18'); grad.addColorStop(0.7, '#0d1430'); grad.addColorStop(1, '#1a1430');
@@ -124,7 +127,7 @@ G.title = (() => {
       btn(ctx, bx, h * 0.5 + credits.length * 22 + 10, bw, 34, '戻る', () => { S.step = 'main'; }, { size: 12 });
     }
     if (S.step === 'connecting') {
-      S.connecting += 1 / 60;
+      S.connecting += rdt;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#94ecd8'; ctx.font = '13px sans-serif';
       const phases = ['ワールドサーバーに接続中', '地形データを同期中', 'アバターを構築中', '物理演算を較正中'];

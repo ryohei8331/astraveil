@@ -39,12 +39,14 @@ G.input = (() => {
 
   const init = canvas => {
     canvasEl = canvas;
+    const KEYFALLBACK = { w: 'up', s: 'down', a: 'left', d: 'right', j: 'attack', k: 'dodge', l: 'magic', e: 'interact', m: 'menu', u: 'element', h: 'sos', ' ': 'interact', '1': 'skill1', '2': 'skill2', '3': 'skill3', '4': 'skill4' };
+    const actOf = e => KEYMAP[e.code] || KEYFALLBACK[(e.key || '').toLowerCase()];
     window.addEventListener('keydown', e => {
-      const a = KEYMAP[e.code];
-      if (a) { press(a); if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); }
+      const a = actOf(e);
+      if (a) { press(a); if (e.code === 'Space' || (e.code || '').startsWith('Arrow')) e.preventDefault(); }
       G.audio.ensure();
     });
-    window.addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) release(a); });
+    window.addEventListener('keyup', e => { const a = actOf(e); if (a) release(a); });
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
       mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;

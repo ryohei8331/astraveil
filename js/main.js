@@ -203,7 +203,7 @@ G.game = {
   };
 
   const loop = now => {
-    acc += Math.min(0.1, (now - last) / 1000);
+    acc += Math.min(0.25, (now - last) / 1000); // 低FPS環境でも実時間を追従(上限は暴走防止)
     last = now;
     while (acc >= STEP) { update(STEP); acc -= STEP; G.input.endFrame(); }
     render();
