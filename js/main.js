@@ -189,6 +189,12 @@ G.game = {
     if (g.mode === 'dialog') { G.dialog.update(dt); return; }
     if (g.mode !== 'play' || G.fx.freeze) return;
 
+    // 3D初期化失敗を黙って握りつぶさない(2Dに落ちたら必ず知らせる)
+    if (!g._r3dWarned && G.settings.render3d && G.R3D && !G.R3D.ok) {
+      g._r3dWarned = true;
+      G.ui.toast('HD-3D描画の初期化に失敗したため2D表示で継続します(報告歓迎)');
+      G.ui.chat('[SYSTEM] 描画: 2Dフォールバック中');
+    }
     const wdt = dt * g.timeScale;
     g.tickTimers(wdt);
     G.time.update(wdt);
