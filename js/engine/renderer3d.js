@@ -161,9 +161,47 @@ void main(){
     }
   };
 
+  // ---- なだらかな地形起伏(見た目のみ。当たり判定は2Dのまま) ----
+  let AMP = 0;
+  const noiseH = (gx, gz) => { // ワールドpx座標 → 高さ(連続値ノイズ)
+    if (!AMP) return 0;
+    const s = 0.040;
+    const x = gx * s, z = gz * s;
+    const xi = Math.floor(x), zi = Math.floor(z);
+    const fx = x - xi, fz = z - zi;
+    const sm = t2 => t2 * t2 * (3 - 2 * t2);
+    const h00 = G.U.hash2(xi, zi), h10 = G.U.hash2(xi + 1, zi);
+    const h01 = G.U.hash2(xi, zi + 1), h11 = G.U.hash2(xi + 1, zi + 1);
+    return (G.U.lerp(G.U.lerp(h00, h10, sm(fx)), G.U.lerp(h01, h11, sm(fx)), sm(fz)) - 0.5) * 2 * AMP;
+  };
+  const FLATISH = new Set(['=', 'b', 'f', 'g', 'r', '~', 'o', 'l', '_', ' ']);
+  const cornerScale = (ctx2, cty) => { // コーナーを共有する4タイルに道があれば平らに(段差割れ防止)
+    const S = G.world.S;
+    for (let dz = -1; dz <= 0; dz++) for (let dx = -1; dx <= 0; dx++) {
+      const tx = ctx2 + dx, ty = cty + dz;
+      if (ty < 0 || tx < 0 || ty >= S.th || tx >= S.tw) continue;
+      if (FLATISH.has(S.grid[ty][tx])) return 0.22;
+    }
+    return 1;
+  };
+  const cornerH = (ctx2, cty) => noiseH(ctx2 * T, cty * T) * cornerScale(ctx2, cty);
+  const groundAt = (gx, gz) => { // エンティティ足元の高さ(コーナー高さの双線形)
+    if (!AMP) return 0;
+    const tx = gx / T, tz = gz / T;
+    const xi = Math.floor(tx), zi = Math.floor(tz);
+    const fx = tx - xi, fz = tz - zi;
+    const h00 = cornerH(xi, zi), h10 = cornerH(xi + 1, zi);
+    const h01 = cornerH(xi, zi + 1), h11 = cornerH(xi + 1, zi + 1);
+    return G.U.lerp(G.U.lerp(h00, h10, fx), G.U.lerp(h01, h11, fx), fz);
+  };
+  let lampList = [];
+
   // ---- ゾーンメッシュ構築 ----
   const buildZone = () => {
     const S = G.world.S;
+    const zn = G.world.zone;
+    AMP = zn.indoor ? 0 : (zn.town ? 2.5 : (zn.underwater ? 4 : (zn.biome === 'ruins' || zn.biome === 'moon' ? 4 : 9)));
+    lampList = [];
     const pal = PALBASE[G.world.zone.biome] || PALBASE.grass;
     const pos = [], col = [], wpos = [], wcol = [];
     const push = (arrP, arrC, verts, c, shade, alpha) => {
@@ -228,29 +266,60 @@ void main(){
         }
         let hgt = HEIGHT[c] || 0;
         if (hgt && gateOpen(c)) hgt = 0;
+        // 起伏: コーナー高さ(道の近くは平らに寄せる)
+        const c00 = cornerH(tx, ty), c10 = cornerH(tx + 1, ty), c11 = cornerH(tx + 1, ty + 1), c01 = cornerH(tx, ty + 1);
+        const hAvg = (c00 + c10 + c11 + c01) / 4;
+        const hMin = Math.min(c00, c10, c11, c01);
         if (hgt === 0) {
-          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], base, floorAO(tx, ty));
+          const ao = floorAO(tx, ty);
+          const hs = [c00, c10, c11, c01].map((hh, i2) => ao[i2] * (1 + hh * 0.018)); // 丘の上は少し明るく
+          push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], base, hs);
           const h2 = G.U.hash2(tx, ty);
-          if (c === 'h' && h2 > 0.3) boxAtY(pos, col, x0 + 8 + h2 * 10, z0 + 8 + (1 - h2) * 10, 6, 0, 7, [0.12, 0.3, 0.12], 1);
-          if (c === 'F') boxAtY(pos, col, x0 + 8 + h2 * 14, z0 + 8 + (1 - h2) * 12, 4, 0, 6, hexRGB(['#ff8fa3', '#ffd75e', '#c9a0ff', '#ffffff'][Math.floor(h2 * 4)]), 1);
-          if (c === 'g') boxAtY(pos, col, x0 + T / 2 - 3, z0 + T / 2 - 3, 6, 0, 2.5, [0.36, 0.93, 0.83], 1);
+          if (c === 'h' && h2 > 0.3) boxAtY(pos, col, x0 + 8 + h2 * 10, z0 + 8 + (1 - h2) * 10, 6, hAvg, hAvg + 7, [0.12, 0.3, 0.12], 1);
+          if (c === 'F') boxAtY(pos, col, x0 + 8 + h2 * 14, z0 + 8 + (1 - h2) * 12, 4, hAvg, hAvg + 6, hexRGB(['#ff8fa3', '#ffd75e', '#c9a0ff', '#ffffff'][Math.floor(h2 * 4)]), 1);
+          if (c === 'g') boxAtY(pos, col, x0 + T / 2 - 3, z0 + T / 2 - 3, 6, hAvg, hAvg + 2.5, [0.36, 0.93, 0.83], 1);
+          // 街灯(街の道沿い。夜に灯る)
+          if (zn.town && c === '=' && h2 > 0.94) {
+            boxAtY(pos, col, x0 + 14, z0 + 14, 3.4, hAvg, hAvg + 25, [0.22, 0.2, 0.24], 1);
+            boxAtY(pos, col, x0 + 11.5, z0 + 11.5, 8.4, hAvg + 25, hAvg + 31, [0.95, 0.85, 0.55], 1);
+            lampList.push({ x: tx * T + 16, y: ty * T + 16, h: hAvg + 28 });
+          }
         } else if (c === 'T') {
           // 樹: 個体差(サイズ・色・高さのゆらぎ)で森に生命感を
           const j = G.U.hash2(tx * 3 + 1, ty * 7 + 2);
           const cs = 1 + (j - 0.5) * 0.36;
           const canopy = base.map(v => Math.min(1, v * (0.85 + j * 0.4)));
           const hTop = 34 + j * 10;
-          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], hexRGB(pal[1]), floorAO(tx, ty));
-          boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, 0, 16, [0.35, 0.27, 0.19], 1);
-          boxAtY(pos, col, x0 + T / 2 - (T - 6) * cs / 2, z0 + T / 2 - (T - 6) * cs / 2, (T - 6) * cs, 13, 25 + j * 4, canopy, 1);
-          boxAtY(pos, col, x0 + T / 2 - (T - 16) * cs / 2, z0 + T / 2 - (T - 16) * cs / 2, (T - 16) * cs, 25 + j * 4, hTop, [Math.min(1, canopy[0] * 1.2), Math.min(1, canopy[1] * 1.2), Math.min(1, canopy[2] * 1.2)], 1);
+          push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), floorAO(tx, ty));
+          boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, hAvg, hAvg + 16, [0.35, 0.27, 0.19], 1);
+          boxAtY(pos, col, x0 + T / 2 - (T - 6) * cs / 2, z0 + T / 2 - (T - 6) * cs / 2, (T - 6) * cs, hAvg + 13, hAvg + 25 + j * 4, canopy, 1);
+          boxAtY(pos, col, x0 + T / 2 - (T - 16) * cs / 2, z0 + T / 2 - (T - 16) * cs / 2, (T - 16) * cs, hAvg + 25 + j * 4, hAvg + hTop, [Math.min(1, canopy[0] * 1.2), Math.min(1, canopy[1] * 1.2), Math.min(1, canopy[2] * 1.2)], 1);
+        } else if (c === 'w') {
+          // 建物: 壁+張り出した軒+切妻風の屋根(ドラクエ的な家並みへ)
+          const roofC = zn.biome === 'ruins' ? [0.30, 0.34, 0.42] : [0.66, 0.30, 0.22];
+          const wallC = [base[0] * 1.02, base[1] * 1.02, base[2] * 1.02];
+          boxAtY(pos, col, x0, z0, T, hMin - 1, hMin + 22, wallC, 1);
+          // 扉(南側が歩ける場合)
+          const southC = ty + 1 < S.th ? S.grid[ty + 1][tx] : ' ';
+          if (!(HEIGHT[southC] > 0) && southC !== ' ') {
+            push(pos, col, [[x0 + 11, hMin - 1, z1 + 0.15], [x0 + 21, hMin - 1, z1 + 0.15], [x0 + 21, hMin + 13, z1 + 0.15], [x0 + 11, hMin + 13, z1 + 0.15]], [0.16, 0.11, 0.08], 1);
+            push(pos, col, [[x0 + 18.5, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 7, z1 + 0.3], [x0 + 18.5, hMin + 7, z1 + 0.3]], [0.8, 0.7, 0.4], 1);
+          }
+          // 軒
+          boxAtY(pos, col, x0 - 3, z0 - 3, T + 6, hMin + 21, hMin + 24, roofC.map(v => v * 0.85), 1);
+          // 屋根(中央の棟へ絞る)
+          const ap = 14;
+          push(pos, col, [[x0 - 3, hMin + 24, z1 + 3], [x1 + 3, hMin + 24, z1 + 3], [x1 - 4, hMin + 24 + ap, z0 + T / 2], [x0 + 4, hMin + 24 + ap, z0 + T / 2]], roofC, 1);
+          push(pos, col, [[x1 + 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z0 - 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.72);
+          push(pos, col, [[x0 - 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z1 + 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x0 + 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
+          push(pos, col, [[x1 + 3, hMin + 24, z1 + 3], [x1 + 3, hMin + 24, z0 - 3], [x1 - 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
         } else if (c === 'D' || c === 'M') {
-          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], hexRGB(pal[1]), 1);
-          boxAtY(pos, col, x0, z0 + 10, 7, 0, hgt, base, 1);
-          boxAtY(pos, col, x1 - 7, z0 + 10, 7, 0, hgt, base, 1);
-          boxAtY(pos, col, x0, z0 + 10, T, hgt - 8, hgt, c === 'M' ? [0.82, 0.85, 1] : base, 1);
+          push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), 1);
+          boxAtY(pos, col, x0, z0 + 10, 7, hMin - 1, hMin + hgt, base, 1);
+          boxAtY(pos, col, x1 - 7, z0 + 10, 7, hMin - 1, hMin + hgt, base, 1);
+          boxAtY(pos, col, x0, z0 + 10, T, hMin + hgt - 8, hMin + hgt, c === 'M' ? [0.82, 0.85, 1] : base, 1);
         } else {
-          boxAtY(pos, col, x0, z0, T, 0, hgt, base, 1);
+          boxAtY(pos, col, x0, z0, T, hMin - 1, hMin + hgt, base, 1);
         }
       }
     }
@@ -282,7 +351,7 @@ void main(){
     const p = G.player;
     const sh = G.fx.shakeOffset;
     const cy = Math.sin(PITCH) * DIST, cz = Math.cos(PITCH) * DIST;
-    const ctr = [p.x + sh.x, 10, p.y + sh.y];
+    const ctr = [p.x + sh.x, 10 + groundAt(p.x, p.y), p.y + sh.y];
     const eye = [ctr[0], ctr[1] + cy, ctr[2] + cz];
     const aspect = w / h, f = 1 / Math.tan(FOVY / 2);
     const vp = M4.mul(M4.persp(FOVY, aspect, 20, 2600), M4.lookAt(eye, ctr, [0, 1, 0]));
@@ -412,7 +481,7 @@ void main(){
     if (G.player && !G.player.dead) ents.push(G.player);
     const drawList = [];
     for (const e of ents) {
-      const pr = projectXZ(e.x, 0, e.y);
+      const pr = projectXZ(e.x, groundAt(e.x, e.y), e.y);
       if (!pr || pr.w > 2400) continue;
       drawList.push({ e, pr });
     }
@@ -423,7 +492,7 @@ void main(){
       e.draw(ctx, { x: e.x, y: e.y }); // 自座標をcamに渡す→原点(0,0)に描かれる
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    G.fx.drawProjected(ctx, (x, y) => projectXZ(x, 0, y));
+    G.fx.drawProjected(ctx, (x, y) => projectXZ(x, groundAt(x, y), y));
 
     // ---- 発光タイルのグロー(水晶・溶岩・遺構・月門・気泡孔) ----
     const S3 = G.world.S;
@@ -441,7 +510,7 @@ void main(){
         else if (cch === 'o') { colG = '160,215,255'; hgtG = 6; }
         else if (cch === 'M' && G.time.isFullMoon() && G.time.isNight()) { colG = '210,220,255'; rad = 44; hgtG = 32; alp = 0.5; }
         if (!colG) continue;
-        const pr2 = projectXZ(tx2 * T + 16, hgtG, ty2 * T + 16);
+        const pr2 = projectXZ(tx2 * T + 16, hgtG + groundAt(tx2 * T + 16, ty2 * T + 16), ty2 * T + 16);
         if (!pr2) continue;
         const fl2 = 0.72 + 0.28 * Math.sin(G.world.animT * 3 + tx2 * 2.3 + ty2 * 1.7);
         const rr2 = Math.max(4, rad * pr2.scale * fl2);
@@ -453,6 +522,19 @@ void main(){
         gcount++;
       }
     }
+    // 街灯の灯り(夕暮れ以降)
+    if (dark > 0.12) {
+      for (const lp of lampList) {
+        const pr3 = projectXZ(lp.x, lp.h, lp.y);
+        if (!pr3) continue;
+        const rr3 = 42 * pr3.scale;
+        const gg2 = ctx.createRadialGradient(pr3.x, pr3.y, 0, pr3.x, pr3.y, rr3);
+        gg2.addColorStop(0, `rgba(255,214,140,${0.5 * Math.min(1, dark * 1.6)})`);
+        gg2.addColorStop(1, 'rgba(255,214,140,0)');
+        ctx.fillStyle = gg2;
+        ctx.beginPath(); ctx.arc(pr3.x, pr3.y, rr3, 0, 7); ctx.fill();
+      }
+    }
     ctx.restore();
   };
 
@@ -460,8 +542,8 @@ void main(){
   const invalidate = () => { zoneKey = null; };
 
   return {
-    init, active, draw, hide, mouseWorld, invalidate,
-    project: (x, y) => cam ? projectXZ(x, 0, y) : null,
+    init, active, draw, hide, mouseWorld, invalidate, groundAt,
+    project: (x, y) => cam ? projectXZ(x, groundAt(x, y), y) : null,
     get ok() { return ok; },
   };
 })();

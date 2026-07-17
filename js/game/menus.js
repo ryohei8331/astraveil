@@ -16,9 +16,13 @@ G.menus = (() => {
 
   // ---- 描画部品 ----
   const btn = (ctx, x, y, w, h, label, fn, opt = {}) => {
-    ctx.fillStyle = opt.active ? 'rgba(148,236,216,.25)' : (opt.danger ? 'rgba(200,60,60,.25)' : 'rgba(255,255,255,.07)');
+    const mx = G.input.mouse.x, my = G.input.mouse.y;
+    const hov = fn && mx >= x && mx <= x + w && my >= y && my <= y + h;
+    ctx.fillStyle = hov ? 'rgba(148,236,216,.38)'
+      : opt.active ? 'rgba(148,236,216,.25)'
+        : (opt.danger ? 'rgba(200,60,60,.25)' : 'rgba(255,255,255,.07)');
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill();
-    ctx.strokeStyle = opt.active ? '#94ecd8' : 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = hov || opt.active ? '#94ecd8' : 'rgba(255,255,255,.25)'; ctx.lineWidth = hov ? 1.6 : 1; ctx.stroke();
     ctx.fillStyle = opt.color || '#eef2f8';
     ctx.font = `${opt.bold ? 'bold ' : ''}${opt.size || 12}px "Hiragino Kaku Gothic ProN", sans-serif`;
     ctx.textAlign = 'center';
@@ -33,6 +37,11 @@ G.menus = (() => {
     ctx.fillStyle = 'rgba(14,18,30,.97)';
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 12); ctx.fill();
     ctx.strokeStyle = 'rgba(148,236,216,.4)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // 操作ヒント(常設)
+    ctx.fillStyle = 'rgba(200,216,235,.55)'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ボタンをクリック / タップで選択 ・ 閉じるのは Esc / M か 右下の「✕閉じる」', px + pw / 2, py + ph + (py + ph + 14 < h ? 14 : -6));
+    ctx.textAlign = 'left';
     return { px, py, pw, ph };
   };
   const pager = (ctx, px, py, pw, ph, total, per) => {
@@ -50,9 +59,36 @@ G.menus = (() => {
 
   // ---- メインメニュー ----
   const TABS = [
-    ['items', 'アイテム'], ['equip', '装備'], ['stats', 'ステータス'],
-    ['skills', 'スキル'], ['quests', 'クエスト'], ['friends', 'フレンド'], ['system', 'システム'],
+    ['items', 'アイテム'], ['equip', '装備'], ['stats', 'ステータス'], ['skills', 'スキル'],
+    ['quests', 'クエスト'], ['map', '地図'], ['friends', 'フレンド'], ['system', 'システム'],
   ];
+
+  // ---- ワールドマップ(発見したゾーンが地図に増える+街へ旅立てる) ----
+  const MAP_NODES = {
+    alba_town: { x: 0.13, y: 0.50, town: [12, 14], name: 'アルバの街' },
+    alba_field: { x: 0.28, y: 0.50, name: 'アルバ平原' },
+    numano: { x: 0.28, y: 0.76, name: '泥濘の沼野' },
+    hane_forest: { x: 0.43, y: 0.50, name: '跳ねる森' },
+    brenzal_town: { x: 0.57, y: 0.50, town: [12, 8], name: 'ブレンザール' },
+    jukai: { x: 0.57, y: 0.27, name: '千枝の樹海' },
+    hisono: { x: 0.57, y: 0.09, name: '秘園', secret: true },
+    lunaria: { x: 0.73, y: 0.09, town: [12, 10], name: 'ルナリア', secret: true },
+    tenkan_peak: { x: 0.90, y: 0.09, name: '天冠の峰', secret: true },
+    crystal_cliff: { x: 0.71, y: 0.50, name: '水晶巣崖' },
+    ruins: { x: 0.71, y: 0.74, name: '星鋼の遺構' },
+    archive_layer: { x: 0.71, y: 0.92, name: 'アーカイヴ層', secret: true },
+    terce_town: { x: 0.86, y: 0.50, town: [12, 8], name: 'テルツェ' },
+    quinsia: { x: 0.86, y: 0.74, town: [5, 8], name: 'クインシア' },
+    shintan: { x: 0.86, y: 0.92, name: '深潭', secret: true },
+  };
+  const MAP_LINKS = [
+    ['alba_town', 'alba_field'], ['alba_field', 'numano'], ['alba_field', 'hane_forest'],
+    ['hane_forest', 'brenzal_town'], ['brenzal_town', 'jukai'], ['jukai', 'hisono'],
+    ['hisono', 'lunaria'], ['lunaria', 'tenkan_peak'], ['brenzal_town', 'crystal_cliff'],
+    ['crystal_cliff', 'ruins'], ['ruins', 'archive_layer'], ['crystal_cliff', 'terce_town'],
+    ['terce_town', 'quinsia'], ['quinsia', 'shintan'],
+  ];
+  const visited = id => !!G.quests.flags['visited_' + id];
   const draw = (ctx, w, h) => {
     const p = G.player;
     const { px, py, pw, ph } = panel(ctx, w, h);
@@ -62,8 +98,7 @@ G.menus = (() => {
       btn(ctx, px + i * tw + 2, py + 8, tw - 4, 30, label, () => { S.tab = id; S.page = 0; S.assign = null; G.audio.sfx('ui'); },
         { active: S.tab === id, size: Math.min(12, tw / label.length * 0.9) });
     });
-    btn(ctx, px + pw - 34, py - 2 < 0 ? 2 : py - 2, 32, 0, '', null); // 占位無効
-    btn(ctx, px + pw - 40, py + ph - 40, 32, 26, '✕', close, { danger: true });
+    btn(ctx, px + pw - 106, py + ph - 42, 96, 30, '✕ 閉じる (M)', close, { danger: true, size: 12 });
     const cy = py + 52;
 
     if (S.tab === 'items') {
@@ -249,6 +284,53 @@ G.menus = (() => {
       }
     }
 
+    if (S.tab === 'map') {
+      const mx0 = px + 14, my0 = cy + 6, mw = pw - 28, mh = ph - 120;
+      ctx.fillStyle = 'rgba(20,28,44,.9)';
+      ctx.beginPath(); ctx.roundRect(mx0, my0, mw, mh, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(148,236,216,.25)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(148,236,216,.5)'; ctx.font = '10px sans-serif';
+      ctx.fillText('— 開拓者の記録した世界図 —(歩いた場所だけが描かれる)', mx0 + 10, my0 + 16);
+      const P = id => ({ x: mx0 + MAP_NODES[id].x * mw, y: my0 + 24 + MAP_NODES[id].y * (mh - 40) });
+      ctx.lineWidth = 2;
+      for (const [a, b] of MAP_LINKS) {
+        if (!visited(a) && !visited(b)) continue;
+        const pa = P(a), pb = P(b);
+        ctx.strokeStyle = visited(a) && visited(b) ? 'rgba(200,216,235,.5)' : 'rgba(200,216,235,.15)';
+        ctx.setLineDash(visited(a) && visited(b) ? [] : [4, 5]);
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      for (const id in MAP_NODES) {
+        const nd = MAP_NODES[id];
+        const vis = visited(id);
+        const known = vis || MAP_LINKS.some(([a, b]) => (a === id && visited(b) && !nd.secret) || (b === id && visited(a) && !nd.secret));
+        if (!known) continue;
+        const pp = P(id);
+        const here = G.world.zoneId === id;
+        if (nd.town && vis) {
+          btn(ctx, pp.x - 34, pp.y - 13, 68, 26, '', here ? null : () => {
+            if (window.confirm(`${nd.name}へ旅立ちますか?(発見済みの街へは自由に移動できる)`)) {
+              close();
+              G.game.changeZone(id, nd.town[0], nd.town[1]);
+            }
+          }, { active: here });
+          ctx.fillStyle = here ? '#ffd75e' : '#eef2f8'; ctx.font = 'bold 11px "Hiragino Kaku Gothic ProN", sans-serif';
+          ctx.textAlign = 'center'; ctx.fillText(`🏘 ${nd.name}`, pp.x, pp.y + 4); ctx.textAlign = 'left';
+        } else {
+          ctx.fillStyle = vis ? (here ? '#ffd75e' : '#94ecd8') : 'rgba(154,163,178,.6)';
+          ctx.beginPath(); ctx.arc(pp.x, pp.y, here ? 7 : 5, 0, 7); ctx.fill();
+          if (here) { ctx.strokeStyle = '#ffd75e'; ctx.beginPath(); ctx.arc(pp.x, pp.y, 11 + Math.sin(Date.now() / 200) * 2, 0, 7); ctx.stroke(); }
+          ctx.fillStyle = vis ? '#c8d8eb' : 'rgba(154,163,178,.7)';
+          ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(vis ? nd.name : '???', pp.x, pp.y - 10);
+          ctx.textAlign = 'left';
+        }
+      }
+      ctx.fillStyle = '#9aa3b2'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
+      ctx.fillText('🏘 の街をクリックするとファストトラベル。金色があなたの現在地。隠しエリアは辿り着くまで地図に載らない。', px + 16, my0 + mh + 22);
+    }
+
     if (S.tab === 'friends') {
       ctx.fillStyle = '#9aa3b2'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
       ctx.fillText('街で偽名の冒険者に話しかけるとフレンドが増える。HP20%以下でSOS(Hキー)を発信すると駆けつけてくれる。', px + 16, cy);
@@ -282,6 +364,11 @@ G.menus = (() => {
       btn(ctx, px + 16, y, 140, 32, '書き出し(JSON)', () => G.save.exportJson());
       btn(ctx, px + 166, y, 140, 32, '読み込み(JSON)', () => G.save.importJson());
       btn(ctx, px + 316, y, 100, 32, `音: ${G.audio.enabled ? 'ON' : 'OFF'}`, () => G.audio.toggle());
+      btn(ctx, px + 166, y + 44, 140, 32, `操作ガイド: ${G.settings.showGuide !== false ? '表示' : '非表示'}`, () => {
+        G.settings.showGuide = G.settings.showGuide === false;
+        G.settings.save();
+      });
+      btn(ctx, px + 16, y + 44, 140, 32, '操作マニュアル', () => G.ui.openManual());
       btn(ctx, px + 426, y, 130, 32, `描画: ${G.settings.render3d && G.R3D.ok ? 'HD-3D' : '2D'}`, () => {
         if (!G.R3D.ok) { G.ui.toast('この端末はWebGL非対応のため2D固定'); return; }
         G.settings.render3d = !G.settings.render3d;
@@ -289,7 +376,7 @@ G.menus = (() => {
         G.R3D.invalidate();
         G.ui.toast(G.settings.render3d ? 'HD-3D描画に切替(フォグ・昼夜ライティング有効)' : 'クラシック2D描画に切替');
       });
-      y += 44;
+      y += 88;
       btn(ctx, px + 16, y, 140, 32, 'タイトルへ戻る', () => { G.save.save('auto'); location.reload(); }, { danger: true });
       y += 52;
       ctx.fillStyle = '#9aa3b2'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';

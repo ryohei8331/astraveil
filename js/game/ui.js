@@ -349,14 +349,24 @@ G.ui = (() => {
           }
         }
       }
-      // キー凡例(PC・右下)
-      if (!G.input.touchMode) {
+      // キー凡例(PC・右下。設定でOFF可)
+      if (!G.input.touchMode && G.settings.showGuide !== false) {
+        ctx.fillStyle = 'rgba(10,14,24,.55)';
+        ctx.beginPath(); ctx.roundRect(w - 248, h - 44, 240, 36, 6); ctx.fill();
         ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
-        ctx.fillStyle = 'rgba(200,216,235,.5)';
-        ctx.fillText('J:攻撃  K:回避  L長押し:魔法  U:属性  E:調べる', w - 12, h - 26);
-        ctx.fillText('1-4:スキル  M:メニュー  H:SOS', w - 12, h - 13);
+        ctx.fillStyle = 'rgba(220,230,245,.85)';
+        ctx.fillText('J:攻撃  K:回避  L長押し:魔法  U:属性  E:調べる', w - 16, h - 30);
+        ctx.fillText('1-4:スキル  M:メニュー(地図/セーブ)  H:SOS', w - 16, h - 16);
         ctx.textAlign = 'left';
       }
+      // 「?」ボタン(いつでも操作説明)
+      const qx = w - 26, qy = 78;
+      ctx.fillStyle = 'rgba(12,16,26,.75)';
+      ctx.beginPath(); ctx.arc(qx, qy, 13, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(148,236,216,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('?', qx, qy + 5); ctx.textAlign = 'left';
+      addClick(qx - 16, qy - 16, 32, 32, () => G.ui.openManual());
       // チュートリアルカード
       if (S.tutor && p && !p.tutorDone) {
         const st = TUTOR_STEPS[S.tutor.i];
@@ -505,6 +515,15 @@ G.ui = (() => {
     update, draw, drawWorldChange, wrapText, bar,
     beginClicks, addClick, handleTap,
     tutorStart, tutorNote, tutorMove,
+    openManual: () => G.dialog.open('操作マニュアル', [
+      '【移動】WASD / 矢印キー。スマホは画面左側をドラッグ。',
+      '【攻撃】J か 左クリック。近くの敵に自動で向き直る。連打で3段コンボ、振り中に押すと次を予約。',
+      '【回避】K / Shift。出始めに無敵時間。敵の攻撃に重ねると「見切り」。',
+      '【魔法】L 長押しでチャージ、離して発動。内側の輪に重なった瞬間がベスト。Uで属性切替。',
+      '【調べる/話す】E。頭上に▼が出ている相手が対象。',
+      '【メニュー】M で開閉(Escでも閉じる)。地図タブから発見済みの街へファストトラベルできる。',
+      '【SOS】HP20%以下で H。フレンドが駆けつけて共闘してくれる。',
+    ]),
     get chatLog() { return S.chatLog; },
   };
 })();

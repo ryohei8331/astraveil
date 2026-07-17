@@ -73,6 +73,7 @@ G.world = (() => {
     const def = G.DATA.zones[zoneId];
     if (!def) { console.error('zone not found:', zoneId); return; }
     W.zoneId = zoneId; W.zone = def;
+    if (G.quests) G.quests.flags['visited_' + zoneId] = true; // 地図の開拓記録
     const maxW = Math.max(...def.map.map(r => r.length));
     W.grid = def.map.map(r => r.padEnd(maxW, ' '));
     W.th = W.grid.length; W.tw = maxW;
