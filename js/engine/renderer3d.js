@@ -308,7 +308,7 @@ void main(){
           // 斜面ライティング(北西上空からの太陽)+丘の上は明るく
           const dhdx = ((c10 + c11) - (c00 + c01)) / (2 * T);
           const dhdz = ((c01 + c11) - (c00 + c10)) / (2 * T);
-          const slope = G.U.clamp(1 - (dhdx + dhdz) * 1.35, 0.74, 1.24);
+          const slope = G.U.clamp(1 - (dhdx + dhdz) * 0.95, 0.80, 1.18); // 柔らかめの陰影(市松感を抑える)
           const hs = [c00, c10, c11, c01].map((hh, i2) => ao[i2] * slope * (1 + hh * 0.014));
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], base, hs);
           const h2 = G.U.hash2(tx, ty);
