@@ -14,7 +14,7 @@ G.Sprite = (() => {
   };
 
   const rr = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
-  const fillOut = (ctx, lw = 1.4) => { ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = OUTLINE; ctx.stroke(); };
+  const fillOut = (ctx, lw = 1.2) => { ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = OUTLINE; ctx.stroke(); };
 
   const ARMOR_LOOK = {
     cloth_tunic: {},
@@ -177,6 +177,10 @@ G.Sprite = (() => {
     if (o.weapon && o.weapon !== 'none') weaponDraw(ctx, o.weapon, hx, hy, wAng, o.weaponGlow);
     ctx.strokeStyle = skin; ctx.lineWidth = 3.2;
     ctx.beginPath(); ctx.moveTo(X + 5.5, gy - 19); ctx.lineTo(hx, hy); ctx.stroke();
+    // 手(小さな拳)
+    ctx.fillStyle = shade(skin, 0.06);
+    ctx.beginPath(); ctx.arc(hx, hy, 2.3, 0, 7); fillOut(ctx, 1);
+    ctx.beginPath(); ctx.arc(X - 6 - Math.sin(armSwing) * 4, gy - 12.5, 2, 0, 7); fillOut(ctx, 1);
 
     // 頭
     const hg = ctx.createRadialGradient(X - 2, gy - 29, 2, X, gy - 27.5, 8.5);
@@ -224,14 +228,28 @@ G.Sprite = (() => {
         ctx.beginPath(); ctx.moveTo(X + ex + s * 3 - 1.5, gy - 28 + ey); ctx.lineTo(X + ex + s * 3 + 1.5, gy - 28 + ey); ctx.stroke();
       }
     } else {
+      // 白目+虹彩+瞳孔+ハイライトの繊細な目
+      const iris = o.eye || '#3a5a7a';
       for (const s of [-1, 1]) {
-        ctx.fillStyle = '#2c2430';
-        ctx.beginPath(); ctx.ellipse(X + ex + s * 3, gy - 28.4 + ey, 1.3, 2, 0, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
-        ctx.beginPath(); ctx.arc(X + ex + s * 3 - 0.4, gy - 29.2 + ey, 0.55, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fdfdfa';
+        ctx.beginPath(); ctx.ellipse(X + ex + s * 3, gy - 28.3 + ey, 1.9, 2.5, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = iris;
+        ctx.beginPath(); ctx.ellipse(X + ex * 1.25 + s * 3, gy - 28.2 + ey * 1.2, 1.25, 1.85, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#1c1822';
+        ctx.beginPath(); ctx.ellipse(X + ex * 1.3 + s * 3, gy - 28.1 + ey * 1.25, 0.65, 1.1, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.95)';
+        ctx.beginPath(); ctx.arc(X + ex + s * 3 - 0.5, gy - 29.1 + ey, 0.5, 0, 7); ctx.fill();
       }
-      ctx.fillStyle = 'rgba(240,140,140,.25)';
-      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(X + ex * 0.6 + s * 5, gy - 26 + ey * 0.5, 1.6, 0, 7); ctx.fill(); }
+      // まつげ(上まぶたの細い線)
+      ctx.strokeStyle = 'rgba(30,24,36,.55)'; ctx.lineWidth = 0.8;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(X + ex + s * 3 - 1.8, gy - 30.2 + ey);
+        ctx.quadraticCurveTo(X + ex + s * 3, gy - 30.9 + ey, X + ex + s * 3 + 1.8, gy - 30.2 + ey);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(240,140,140,.28)';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(X + ex * 0.6 + s * 5, gy - 26 + ey * 0.5, 1.7, 1.1, 0, 0, 7); ctx.fill(); }
     }
 
     // 詠唱チャージの粒子

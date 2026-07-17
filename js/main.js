@@ -95,6 +95,29 @@ G.game = {
     G.save.save('auto');
   },
 
+  // 世界内クリック: カーソル直下のNPC/宝箱/看板をそのまま調べる(直感操作)
+  clickWorld(sx, sy) {
+    if (this.mode !== 'play' || !G.player || G.player.dead) return false;
+    let wx, wy;
+    if (G.R3D && G.R3D.active()) {
+      const mw = G.R3D.mouseWorld();
+      if (!mw) return false;
+      wx = mw.x; wy = mw.y;
+    } else { wx = G.cam.x + sx; wy = G.cam.y + sy; }
+    const cands = G.world.near(wx, wy, 36, e => e.interact && !e.dead);
+    if (!cands.length) return false;
+    cands.sort((a, b) => G.U.dist(wx, wy, a.x, a.y) - G.U.dist(wx, wy, b.x, b.y));
+    const e = cands[0];
+    const p = G.player;
+    if (G.U.dist(p.x, p.y, e.x, e.y) > 90) {
+      G.ui.toast('少し遠い——近づいてからもう一度');
+      return true; // 攻撃の暴発は防ぐ
+    }
+    if (G.ui.tutorNote && e.kind === 'npc') G.ui.tutorNote('talk');
+    e.interact(p);
+    return true;
+  },
+
   trySOS() {
     const p = G.player;
     if (p.hp / p.hpMax >= 0.2) { G.ui.toast('SOSはHP20%以下の窮地でのみ発信できる'); return; }

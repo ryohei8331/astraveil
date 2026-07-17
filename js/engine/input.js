@@ -56,7 +56,9 @@ G.input = (() => {
       if (e.button !== 0) return;
       const r = canvas.getBoundingClientRect();
       const x = e.clientX - r.left, y = e.clientY - r.top;
+      mouse.x = x; mouse.y = y;
       if (G.ui && G.ui.handleTap && G.ui.handleTap(x, y)) return; // UIが消費
+      if (G.game && G.game.clickWorld && G.game.clickWorld(x, y)) return; // NPC等を直接クリック
       press('attack'); mouse.down = true;
     });
     window.addEventListener('mouseup', () => { release('attack'); mouse.down = false; });

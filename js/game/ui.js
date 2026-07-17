@@ -70,7 +70,9 @@ G.ui = (() => {
     // 世界変化オーバーレイ: どこでもタップで閉じる
     if (G.game.mode === 'worldchange') { dismissWorldChange(); return true; }
     if (G.game.mode === 'dialog') { G.dialog.advance(); return true; }
-    for (const c of S.clickables) {
+    // 後に描いた(=上に見えている)ボタンを優先
+    for (let i = S.clickables.length - 1; i >= 0; i--) {
+      const c = S.clickables[i];
       if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) { c.fn(); return true; }
     }
     // SOSボタン
@@ -117,8 +119,10 @@ G.ui = (() => {
   // ---- バー描画ヘルパー ----
   const bar = (ctx, x, y, w, h, ratio, fg, bg = 'rgba(0,0,0,.55)') => {
     ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = fg; ctx.fillRect(x, y, w * G.U.clamp(ratio, 0, 1), h);
-    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    const fw = w * G.U.clamp(ratio, 0, 1);
+    ctx.fillStyle = fg; ctx.fillRect(x, y, fw, h);
+    ctx.fillStyle = 'rgba(255,255,255,.30)'; ctx.fillRect(x, y, fw, Math.max(1, h * 0.22)); // 上面のつや
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
   };
 
   // ---- HUD描画 ----
@@ -141,8 +145,46 @@ G.ui = (() => {
     }
     ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
 
-    // 左上: HP/MP/STM/満腹(HPはダメージの残像つき)
-    const bx = 12, bw = Math.min(210, w * 0.4);
+    // 左上: ポートレート+HP/MP/STM/満腹(HPはダメージの残像つき)
+    {
+      const cx2 = 34, cy3 = 38;
+      ctx.fillStyle = 'rgba(10,14,24,.8)';
+      ctx.beginPath(); ctx.arc(cx2, cy3, 23, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,215,94,.65)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx2, cy3, 20, 0, 7); ctx.stroke();
+      // 顔(プレイヤーのミニポートレート)
+      ctx.fillStyle = '#f2cfa5';
+      ctx.beginPath(); ctx.arc(cx2, cy3 + 2, 12, 0, 7); ctx.fill();
+      ctx.fillStyle = '#4a3830';
+      ctx.beginPath(); ctx.arc(cx2, cy3 - 1, 11.5, Math.PI * 0.88, Math.PI * 2.12); ctx.closePath(); ctx.fill();
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx2 + i * 4.5, cy3 - 8);
+        ctx.lineTo(cx2 + i * 4.5 + 1.5, cy3 - 13 - (i % 2 ? 2.5 : 0.5));
+        ctx.lineTo(cx2 + i * 4.5 + 3, cy3 - 8);
+        ctx.fill();
+      }
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#fdfdfa';
+        ctx.beginPath(); ctx.ellipse(cx2 + s * 4.5, cy3 + 3, 2.4, 3, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#3a5a7a';
+        ctx.beginPath(); ctx.ellipse(cx2 + s * 4.5, cy3 + 3.4, 1.5, 2.2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#1c1822';
+        ctx.beginPath(); ctx.ellipse(cx2 + s * 4.5, cy3 + 3.6, 0.8, 1.3, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.95)';
+        ctx.beginPath(); ctx.arc(cx2 + s * 4.5 - 0.6, cy3 + 2.4, 0.6, 0, 7); ctx.fill();
+      }
+      // レベルバッジ
+      ctx.fillStyle = '#1a2030';
+      ctx.beginPath(); ctx.arc(cx2 + 16, cy3 + 16, 10, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,215,94,.8)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(p.level, cx2 + 16, cy3 + 19.5); ctx.textAlign = 'left';
+    }
+    const bx = 64, bw = Math.min(200, w * 0.34);
+    ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 11px "Hiragino Kaku Gothic ProN", sans-serif';
+    ctx.fillText(p.name + (G.Social && G.Social.fameTier() > 0 ? ` 『${G.Social.titleName()}』` : ''), bx, 9);
     if (S.lagHp === null || S.lagHp < p.hp) S.lagHp = p.hp;
     S.lagHp += (p.hp - S.lagHp) * 0.045;
     ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(bx, 12, bw, 14);
@@ -152,7 +194,9 @@ G.ui = (() => {
     const hpc = p.hp / p.hpMax < 0.25 ? ['#ff7a6a', '#c03030'] : ['#f08080', '#c04040'];
     hpg.addColorStop(0, hpc[0]); hpg.addColorStop(1, hpc[1]);
     ctx.fillStyle = hpg;
-    ctx.fillRect(bx, 12, bw * G.U.clamp(p.hp / p.hpMax, 0, 1), 14);
+    const hpw = bw * G.U.clamp(p.hp / p.hpMax, 0, 1);
+    ctx.fillRect(bx, 12, hpw, 14);
+    ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.fillRect(bx, 12, hpw, 3); // つや
     ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, 12.5, bw - 1, 13);
     ctx.fillStyle = '#fff'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
     ctx.fillText(`HP ${Math.ceil(p.hp)}/${p.hpMax}`, bx + 5, 23);
@@ -359,14 +403,23 @@ G.ui = (() => {
         ctx.fillText('1-4:スキル  M:メニュー(地図/セーブ)  H:SOS', w - 16, h - 16);
         ctx.textAlign = 'left';
       }
-      // 「?」ボタン(いつでも操作説明)
+      // 「?」ボタン(いつでも操作説明)※プレイ中のみ判定登録(メニューの裏で反応しないように)
       const qx = w - 26, qy = 78;
       ctx.fillStyle = 'rgba(12,16,26,.75)';
       ctx.beginPath(); ctx.arc(qx, qy, 13, 0, 7); ctx.fill();
       ctx.strokeStyle = 'rgba(148,236,216,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('?', qx, qy + 5); ctx.textAlign = 'left';
-      addClick(qx - 16, qy - 16, 32, 32, () => G.ui.openManual());
+      if (G.game.mode === 'play') addClick(qx - 16, qy - 16, 32, 32, () => G.ui.openManual());
+      // ホットバー・属性玉もクリックで使える(直感操作)
+      if (G.game.mode === 'play' && !G.input.touchMode) {
+        const hbY2 = h - 54, slotW2 = 40, hbX2 = w / 2 - slotW2 * 2 - 30;
+        for (let i = 0; i < 4; i++) {
+          const sx2 = hbX2 + i * (slotW2 + 6);
+          addClick(sx2, hbY2, slotW2, slotW2, () => G.Skills.use(p, i));
+        }
+        addClick(hbX2 + 4 * (slotW2 + 6) + 2, hbY2 + 6, 28, 28, () => G.Magic.cycleElement(p));
+      }
       // チュートリアルカード
       if (S.tutor && p && !p.tutorDone) {
         const st = TUTOR_STEPS[S.tutor.i];

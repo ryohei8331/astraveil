@@ -41,9 +41,10 @@ G.R3D = (() => {
   const VSH = `
 attribute vec3 aPos; attribute vec4 aCol;
 uniform mat4 uVP; uniform vec3 uTint; uniform float uTime;
-varying vec4 vCol; varying float vDepth;
+varying vec4 vCol; varying float vDepth; varying vec3 vW;
 void main(){
   vec3 p = aPos;
+  vW = aPos;
   float glint = 0.0;
   if (aCol.a < 0.9) { // 水面: 波でうねり、頂点ごとに煌めく
     float w = sin(uTime*2.1 + p.x*0.085 + p.z*0.06) + sin(uTime*3.3 + p.z*0.11);
@@ -95,11 +96,25 @@ void main(){
 }`;
   const FSH = `
 precision mediump float;
-varying vec4 vCol; varying float vDepth;
-uniform vec3 uFog; uniform float uFogDen;
+varying vec4 vCol; varying float vDepth; varying vec3 vW;
+uniform vec3 uFog; uniform float uFogDen; uniform float uTime;
+float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float vn(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h2(i), h2(i+vec2(1.,0.)), f.x), mix(h2(i+vec2(0.,1.)), h2(i+vec2(1.,1.)), f.x), f.y);
+}
 void main(){
+  // ピクセル単位の質感(3オクターブのノイズで土・草・石の肌合いを出す)
+  vec2 q = vW.xz + vW.y * 0.6;
+  float g = vn(q * 0.16) * 0.45 + vn(q * 0.75) * 0.35 + vn(q * 3.1) * 0.20;
+  vec3 c = vCol.rgb * (0.92 + g * 0.16);
+  if (vCol.a < 0.9) { // 水面のきらめき
+    float sp = vn(vW.xz * 0.9 + vec2(uTime * 0.35, uTime * 0.22));
+    c += vec3(0.10, 0.12, 0.13) * smoothstep(0.72, 0.95, sp);
+  }
   float f = clamp(1.0 - exp(-uFogDen * vDepth * 0.0016), 0.0, 1.0);
-  gl_FragColor = vec4(mix(vCol.rgb, uFog, f), vCol.a);
+  gl_FragColor = vec4(mix(c, uFog, f), vCol.a);
 }`;
 
   const init = () => {
@@ -348,8 +363,18 @@ void main(){
           const hTop = 34 + j * 10;
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), floorAO(tx, ty));
           boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, hAvg, hAvg + 16, [0.35, 0.27, 0.19], 1);
-          boxAtY(pos, col, x0 + T / 2 - (T - 6) * cs / 2, z0 + T / 2 - (T - 6) * cs / 2, (T - 6) * cs, hAvg + 13, hAvg + 25 + j * 4, canopy, 1);
-          boxAtY(pos, col, x0 + T / 2 - (T - 16) * cs / 2, z0 + T / 2 - (T - 16) * cs / 2, (T - 16) * cs, hAvg + 25 + j * 4, hAvg + hTop, [Math.min(1, canopy[0] * 1.2), Math.min(1, canopy[1] * 1.2), Math.min(1, canopy[2] * 1.2)], 1);
+          // ふっくらした多葉の樹冠(中心+四方のローブ)
+          {
+            const lobe = (ox, oz, s2, y0, y1, f2) =>
+              boxAtY(pos, col, x0 + T / 2 - s2 / 2 + ox, z0 + T / 2 - s2 / 2 + oz, s2,
+                hAvg + y0, hAvg + y1, canopy.map(v => Math.min(1, v * f2)), 1);
+            lobe(0, 0, (T - 12) * cs, 13, hTop, 1.0);
+            lobe(-9 * cs, 0, 15 * cs, 16, hTop - 8, 0.88);
+            lobe(9 * cs, 1, 15 * cs, 15, hTop - 6, 1.10);
+            lobe(0, -9 * cs, 14 * cs, 17, hTop - 9, 0.84);
+            lobe(1, 9 * cs, 15 * cs, 14, hTop - 5, 1.16);
+            lobe(3 * cs, -2, (T - 20) * cs, hTop - 4, hTop + 5, 1.24); // てっぺんの新芽
+          }
           castShadow(0.14, 3);
         } else if (c === 'w') {
           // 建物: 壁+張り出した軒+切妻風の屋根(ドラクエ的な家並みへ)
