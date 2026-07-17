@@ -49,7 +49,14 @@ G.input = (() => {
       const r = canvas.getBoundingClientRect();
       mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
     });
-    canvas.addEventListener('mousedown', e => { if (e.button === 0) { press('attack'); mouse.down = true; } G.audio.ensure(); });
+    canvas.addEventListener('mousedown', e => {
+      G.audio.ensure();
+      if (e.button !== 0) return;
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      if (G.ui && G.ui.handleTap && G.ui.handleTap(x, y)) return; // UIが消費
+      press('attack'); mouse.down = true;
+    });
     window.addEventListener('mouseup', () => { release('attack'); mouse.down = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 

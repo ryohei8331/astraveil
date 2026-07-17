@@ -73,7 +73,9 @@ G.world = (() => {
     const def = G.DATA.zones[zoneId];
     if (!def) { console.error('zone not found:', zoneId); return; }
     W.zoneId = zoneId; W.zone = def;
-    W.grid = def.map; W.th = def.map.length; W.tw = def.map[0].length;
+    const maxW = Math.max(...def.map.map(r => r.length));
+    W.grid = def.map.map(r => r.padEnd(maxW, ' '));
+    W.th = W.grid.length; W.tw = maxW;
     W.entities = []; W.spawnRecs = []; W.bossActive = null; W.enteredMsgs.clear();
     G.fx.clear();
     // スポーン記録
@@ -91,7 +93,7 @@ G.world = (() => {
     }
     // 偽プレイヤー(街の賑わい)
     if (def.town && G.DATA.flavor && G.NPC.createFake) {
-      const n = def.fakePlayers || 6;
+      const n = def.fakePlayers !== undefined ? def.fakePlayers : 6;
       for (let i = 0; i < n; i++) {
         const pos = randOpenPos([1, 1, W.tw - 2, W.th - 2]);
         if (pos) W.entities.push(G.NPC.createFake(pos.x, pos.y));

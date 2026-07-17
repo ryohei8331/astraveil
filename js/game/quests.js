@@ -134,8 +134,8 @@ G.quests = (() => {
     }
     // グローバルトリガー(EX発火チェック等)
     if (G.DATA.triggers) for (const tr of G.DATA.triggers) {
-      if (tr.on === ev && !S.flags[tr.id] && tr.check(data)) {
-        S.flags[tr.id] = true;
+      if (tr.on === ev && (tr.repeat || !S.flags[tr.id]) && tr.check(data)) {
+        if (!tr.repeat) S.flags[tr.id] = true;
         tr.run(data);
       }
     }
