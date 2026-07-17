@@ -41,7 +41,7 @@ global.location = { reload: noop };
 // ---- スクリプト読み込み(index.htmlと同順) ----
 const ROOT = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1].split('?')[0]);
 if (scripts.length < 20) { console.error('FAIL: script list too short', scripts.length); process.exit(1); }
 for (const s of scripts) {
   const code = fs.readFileSync(path.join(ROOT, s), 'utf8');
