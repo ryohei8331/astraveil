@@ -97,7 +97,7 @@ void main(){
   const FSH = `
 precision mediump float;
 varying vec4 vCol; varying float vDepth; varying vec3 vW;
-uniform vec3 uFog; uniform float uFogDen; uniform float uTime;
+uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime;
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float vn(vec2 p){
   vec2 i = floor(p), f = fract(p);
