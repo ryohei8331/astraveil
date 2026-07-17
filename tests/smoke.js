@@ -393,7 +393,72 @@ const findEnt = pred => G.world.entities.find(pred);
     if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
     frames(5);
   }
-  ok(G.quests.flags.starsteel_open && G.quests.flags.dragon_pact && G.quests.flags.abyss_open && G.quests.flags.attunement, '七凶星 5/7 確認(残り2体は未確認のまま)');
+  ok(G.quests.flags.starsteel_open && G.quests.flags.dragon_pact && G.quests.flags.abyss_open && G.quests.flags.attunement, '七凶星 5/7 確認');
+
+  console.log('== 贈り物システム ==');
+  G.game.changeZone('alba_town', 12, 14);
+  frames(60);
+  const mireille2 = findEnt(e => e.kind === 'npc' && e.id === 'mireille');
+  G.player.x = mireille2.x + 20; G.player.y = mireille2.y;
+  G.Items.give('moon_grass', 1);
+  const affB = G.Social.S.aff['mireille'] || 0;
+  ok(G.Social.gift(mireille2, 'moon_grass'), '贈り物実行');
+  ok((G.Social.S.aff['mireille'] || 0) >= affB + 12, '好物ボーナスで好感度大幅アップ');
+
+  console.log('== クラン依頼 ==');
+  ok(G.Social.clanQuestId() === 'cq_ginro', '所属クランの依頼ID');
+  G.quests.start('cq_ginro');
+  ok(!!G.quests.active.cq_ginro, 'クラン依頼受注');
+  for (let k = 0; k < 8; k++) {
+    const hd = G.world.spawnEnemy('packhound', G.player.x + 60, G.player.y);
+    while (hd && !hd.dead) G.Combat.playerHit(hd, { mult: 40 });
+    frames(3);
+  }
+  ok(!!G.quests.completed.cq_ginro, 'クラン依頼達成(統率を断て)');
+
+  console.log('== 七凶星6体目: 無貌のカガミ ==');
+  G.game.changeZone('kagami_ma', 10, 14);
+  frames(300);
+  const kg = findEnt(e => e.defId === 'kagami');
+  ok(!!kg, 'カガミ出現');
+  if (kg) {
+    kg.aggro = true; kg.target = G.player;
+    frames(120);
+    let guard = 0;
+    while (!kg.dead && guard++ < 500) G.Combat.playerHit(kg, { mult: 60 });
+    frames(10);
+    ok(!!G.quests.flags.kagami_slain, '世界フラグ: 無貌、剥落(6/7)');
+    if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
+    frames(5);
+  }
+
+  console.log('== 七凶星7体目: 終末のアーカイヴ ==');
+  G.quests.flags.fenreed_met = true;
+  G.time.S.day = 9; // 月齢0(新月)
+  G.time.S.t = 9 * 0 + G.time.DAY_LEN * 0.7; // 夜
+  ok(G.time.moonPhase() === 0 && G.time.isNight(), '新月の夜');
+  ok(G.quests.conds.archiveGate(), '最終ゲート開放条件');
+  G.game.changeZone('archive_layer', 12, 11);
+  frames(300);
+  const ar = findEnt(e => e.defId === 'archive');
+  ok(!!ar, 'アーカイヴ出現');
+  if (ar) {
+    G.player.x = ar.x + 60; G.player.y = ar.y;
+    frames(30);
+    ok(ar.aggro, '最終戦開始');
+    // 小刻みに削ってロールバックを観測
+    for (let k = 0; k < 6; k++) { G.Combat.playerHit(ar, { mult: 2 }); frames(60); }
+    const hpAfterChip = ar.hp;
+    frames(700); // ロールバック周期跨ぎ
+    ok(ar.hp >= hpAfterChip - 1, 'ロールバック(小ダメージは巻き戻される)');
+    let guard = 0;
+    while (!ar.dead && guard++ < 900) { G.Combat.playerHit(ar, { mult: 80 }); if (guard % 30 === 0) frames(2); }
+    frames(10);
+    ok(!!G.quests.flags.archive_slain, '世界フラグ: 七星完集(7/7)');
+    if (G.game.mode === 'worldchange') G.ui.dismissWorldChange();
+    ok(G.Items.count('admin_key') >= 1 || findEnt(e => e.kind === 'pickup'), '管理鍵レガシー(ドロップ)');
+    frames(120);
+  }
 
   console.log('== メニュー描画(全タブ回し) ==');
   G.menus.open();

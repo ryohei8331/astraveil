@@ -68,8 +68,13 @@ G.menus = (() => {
 
     if (S.tab === 'items') {
       const entries = Object.entries(p.inventory);
+      const nearNpc = G.world.near(p.x, p.y, 66, e2 => e2.kind === 'npc' && !e2.dead)[0];
       ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 13px sans-serif';
       ctx.fillText(`所持金: ${G.U.fmt(p.stella)} ステラ`, px + 16, cy);
+      if (nearNpc) {
+        ctx.fillStyle = '#7ee0a3'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
+        ctx.fillText(`目の前に ${nearNpc.def.name} — 「贈る」で好感度が上がる(好物なら大幅に)`, px + 200, cy);
+      }
       const per = 7, pg = pager(ctx, px, py, pw, ph, entries.length, per);
       entries.slice(pg * per, pg * per + per).forEach(([id, qty], i) => {
         const it = G.DATA.items[id];
@@ -85,6 +90,9 @@ G.menus = (() => {
         if (usable) {
           const label = ['weapon', 'armor', 'acc'].includes(it.type) ? '装備' : '使う';
           btn(ctx, px + pw - 76, y + 10, 56, 30, label, () => G.Items.use(id), { active: true });
+        }
+        if (nearNpc && G.Social.gift && ['food', 'material', 'potion'].includes(it.type)) {
+          btn(ctx, px + pw - 140, y + 10, 56, 30, '贈る', () => G.Social.gift(nearNpc, id));
         }
       });
       if (!entries.length) { ctx.fillStyle = '#9aa3b2'; ctx.fillText('(何も持っていない)', px + 20, cy + 40); }

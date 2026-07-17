@@ -90,6 +90,7 @@ G.game = {
     if (!p.friends.length) { G.ui.toast('フレンドがいない…街で仲間を作っておくべきだった'); return; }
     if (p.sosCd > 0) { G.ui.toast(`SOSは再発信まであと${Math.ceil(p.sosCd)}秒`); return; }
     p.sosCd = G.Social && G.Social.clan === '聖環騎士団' ? 90 : 180; // 聖環: 祈りは届く
+    G.quests.fire('sos', {});
     G.audio.sfx('sos');
     G.ui.banner('SOS発信——フレンドに正確な座標が共有された');
     const n = Math.min(2, p.friends.length);

@@ -11,12 +11,27 @@
         const So = G.Social;
         const c = So.CLANS[clanName];
         if (So.clan === clanName) {
-          G.dialog.open(npc.def.name, [
-            `おう、${p.name}。クランの調子はどうだ?特典「${c.perk}」は活きてるか?`,
-            '脱退したい時はもう一度話しかけて、覚悟を決めてくれ。',
-          ], () => {
-            if (window.confirm(`${clanName}を脱退しますか?(特典を失います)`)) So.leave();
-          });
+          const qid = So.clanQuestId ? So.clanQuestId() : null;
+          const QD = qid && G.DATA.quests[qid];
+          if (QD && !G.quests.completed[qid] && !G.quests.active[qid]) {
+            G.dialog.open(npc.def.name, [
+              `${p.name}、ちょうどいい。クランから依頼だ。`,
+              `【${QD.name}】—— ${QD.stages[0].text}`,
+              '受けてくれるな?(受注される)',
+            ], () => G.quests.start(qid));
+          } else if (QD && G.quests.active[qid]) {
+            G.dialog.open(npc.def.name, [
+              `依頼の途中だな: ${QD.stages[G.quests.active[qid].stage].text}`,
+              '期待してるぞ。',
+            ]);
+          } else {
+            G.dialog.open(npc.def.name, [
+              `おう、${p.name}。クランの調子はどうだ?特典「${c.perk}」は活きてるか?`,
+              '脱退したい時はもう一度話しかけて、覚悟を決めてくれ。',
+            ], () => {
+              if (window.confirm(`${clanName}を脱退しますか?(特典を失います)`)) So.leave();
+            });
+          }
         } else if (So.clan) {
           G.dialog.open(npc.def.name, [
             `${So.clan}の${p.name}か。うちに来たいなら、まず今の所属を抜けてからだ。`,
