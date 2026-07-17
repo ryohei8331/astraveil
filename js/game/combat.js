@@ -64,6 +64,8 @@ G.Combat = (() => {
 
     // 敵防御・耐性
     dmg *= 100 / (100 + (e.def.def || 0));
+    if (e.vulnerable) dmg *= e.vulnerable;      // 統率崩壊(頭数狩り)の動揺
+    if (e.guarded) dmg *= 0.5;                  // 分身が生きている間の骸のバリア
     if (opt.element) {
       if ((e.def.weak || []).includes(opt.element)) { dmg *= 1.6; G.fx.float(e.x, e.y - 38, '弱点!', { color: '#ffd75e', size: 12 }); }
       if ((e.def.resist || []).includes(opt.element)) dmg *= 0.5;

@@ -59,6 +59,7 @@ G.Player = (() => {
         if (this.stm < this.stmMax * 0.25) v *= 0.72; // STM低下で挙動鈍化(仕様)
         if (G.world.tileUnder(this) === 'h') v *= 0.8;
         if (this.statusEf.bind) v *= 0.35;
+        if (this.statusEf.mud) v *= 0.6; // 泥潜りの振動足止め
         if (this.hasBuff('setsuna')) v *= 2.28; // 世界0.35倍の中で自分は0.8倍相当
         return v;
       },
@@ -72,6 +73,7 @@ G.Player = (() => {
       applyStatus(st) {
         if (st.type === 'poison') this.statusEf.poison = { t: st.dur || 5, dps: st.dps || 4 };
         if (st.type === 'bind') { this.statusEf.bind = { t: st.dur || 1.2 }; G.fx.float(this.x, this.y - 42, '拘束!', { color: '#7ee0a3' }); }
+        if (st.type === 'mud') this.statusEf.mud = { t: st.dur || 0.3 };
       },
 
       gainExp(n) {
@@ -139,6 +141,7 @@ G.Player = (() => {
           if (ps.t <= 0) delete this.statusEf.poison;
         }
         if (this.statusEf.bind) { this.statusEf.bind.t -= dt; if (this.statusEf.bind.t <= 0) delete this.statusEf.bind; }
+        if (this.statusEf.mud) { this.statusEf.mud.t -= dt; if (this.statusEf.mud.t <= 0) delete this.statusEf.mud; }
         // 満腹度: 45秒で1減。20以下でSTM自然回復停止(仕様)
         this.hungerT += dt;
         if (this.hungerT >= 45) {
