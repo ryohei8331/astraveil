@@ -237,9 +237,14 @@ G.Player = (() => {
         const cost = 8;
         if (this.stm < cost) { G.fx.float(this.x, this.y - 30, 'スタミナ切れ', { color: '#9aa3b2', size: 11 }); return; }
         this.stm -= cost; this.stmDelay = 0.6;
-        // マウス操作なら照準方向を向く
+        // マウス操作なら照準方向を向く(3Dモードは地面への逆投影)
         if (!G.input.touchMode && G.input.mouse.down) {
-          this.facing = G.U.angTo(this.x, this.y, G.cam.x + G.input.mouse.x, G.cam.y + G.input.mouse.y);
+          let ax2 = G.cam.x + G.input.mouse.x, ay2 = G.cam.y + G.input.mouse.y;
+          if (G.R3D && G.R3D.active()) {
+            const mw = G.R3D.mouseWorld();
+            if (mw) { ax2 = mw.x; ay2 = mw.y; }
+          }
+          this.facing = G.U.angTo(this.x, this.y, ax2, ay2);
         }
         const { wtype } = G.Combat.playerAtk();
         const prof = this.proficiency[wtype] || 0;

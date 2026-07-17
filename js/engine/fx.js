@@ -70,8 +70,39 @@ G.fx = (() => {
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
   };
   const clear = () => { floats.length = 0; parts.length = 0; };
+  // 3Dモード用: 各要素を投影関数で画面座標に変換して描く
+  const drawProjected = (ctx, project) => {
+    for (const p of parts) {
+      const pr = project(p.x, p.y);
+      if (!pr) continue;
+      const a = 1 - p.t / p.life;
+      ctx.globalAlpha = a;
+      if (p.ring) {
+        ctx.strokeStyle = p.color; ctx.lineWidth = 2.5 * a * pr.scale;
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, (p.r + (p.maxR - p.r) * (p.t / p.life)) * pr.scale, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(pr.x, pr.y, (p.r * a + 0.5) * pr.scale, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    for (const f of floats) {
+      const pr = project(f.x, f.y);
+      if (!pr) continue;
+      const a = f.t < f.life - 0.25 ? 1 : (f.life - f.t) / 0.25;
+      ctx.globalAlpha = a;
+      ctx.font = `bold ${Math.round(f.size * Math.min(pr.scale, 2))}px 'Hiragino Kaku Gothic ProN', sans-serif`;
+      ctx.textAlign = 'center';
+      if (f.stroke) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(f.text, pr.x, pr.y); }
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, pr.x, pr.y);
+    }
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  };
   return {
-    float, burst, ring, shake, hitstop, update, draw, clear,
+    float, burst, ring, shake, hitstop, update, draw, drawProjected, clear,
     get freeze() { return freezeT > 0; },
     get shakeOffset() {
       return shakeT > 0

@@ -259,6 +259,13 @@ G.menus = (() => {
       btn(ctx, px + 16, y, 140, 32, '書き出し(JSON)', () => G.save.exportJson());
       btn(ctx, px + 166, y, 140, 32, '読み込み(JSON)', () => G.save.importJson());
       btn(ctx, px + 316, y, 100, 32, `音: ${G.audio.enabled ? 'ON' : 'OFF'}`, () => G.audio.toggle());
+      btn(ctx, px + 426, y, 130, 32, `描画: ${G.settings.render3d && G.R3D.ok ? 'HD-3D' : '2D'}`, () => {
+        if (!G.R3D.ok) { G.ui.toast('この端末はWebGL非対応のため2D固定'); return; }
+        G.settings.render3d = !G.settings.render3d;
+        G.settings.save();
+        G.R3D.invalidate();
+        G.ui.toast(G.settings.render3d ? 'HD-3D描画に切替(フォグ・昼夜ライティング有効)' : 'クラシック2D描画に切替');
+      });
       y += 44;
       btn(ctx, px + 16, y, 140, 32, 'タイトルへ戻る', () => { G.save.save('auto'); location.reload(); }, { danger: true });
       y += 52;

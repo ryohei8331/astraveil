@@ -1,6 +1,14 @@
 'use strict';
 // メイン: ブート・状態機械・固定タイムステップループ・描画合成
-G.VERSION = '2.1.0';
+G.VERSION = '3.0.0';
+
+// 恒久設定(セーブとは別枠)
+G.settings = (() => {
+  let s = { render3d: true };
+  try { Object.assign(s, JSON.parse(localStorage.getItem('astraveil_settings') || '{}')); } catch (e) { }
+  s.save = () => { try { localStorage.setItem('astraveil_settings', JSON.stringify({ render3d: s.render3d })); } catch (e) { } };
+  return s;
+})();
 
 G.game = {
   modeStack: ['title'],
@@ -113,6 +121,7 @@ G.game = {
   window.addEventListener('resize', resize);
   resize();
   G.input.init(canvas);
+  if (G.R3D) G.R3D.init(); // WebGL不可なら自動で2D続行
 
   const STEP = 1 / 60;
   let last = performance.now(), acc = 0;
@@ -165,27 +174,38 @@ G.game = {
     const g = G.game, w = g.vw, h = g.vh;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     G.ui.beginClicks();
-    ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
 
     if (g.mode === 'title' || (g.modeStack[0] === 'title' && ['board', 'menu'].includes(g.mode))) {
+      if (G.R3D) G.R3D.hide();
+      ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
       G.title.draw(ctx, w, h);
     } else if (G.player && G.world.zone) {
-      const shake = G.fx.shakeOffset;
-      const cam = { x: G.cam.x + shake.x, y: G.cam.y + shake.y };
-      G.world.draw(ctx, cam, w, h);
-      G.fx.draw(ctx, cam);
-      // 昼夜・ダンジョンの闇
-      const zone = G.world.zone;
-      let dark = zone.dark ? 0.72 : (zone.indoor ? 0 : G.time.darkness());
-      if (dark > 0.01) {
-        const px = G.player.x - cam.x, py = G.player.y - cam.y;
-        const grad = ctx.createRadialGradient(px, py, 60, px, py, zone.dark ? 220 : 420);
-        const moon = G.time.isFullMoon() && !zone.dark ? '20,24,52' : '8,10,22';
-        grad.addColorStop(0, `rgba(${moon},0)`);
-        grad.addColorStop(1, `rgba(${moon},${dark})`);
-        ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+      if (G.R3D && G.R3D.active()) {
+        // 3D: 地形はWebGL、キャラ/FX/UIは透明な2Dキャンバスに重ね描き
+        ctx.clearRect(0, 0, w, h);
+        G.R3D.draw(ctx, w, h, dpr);
+      } else {
+        if (G.R3D) G.R3D.hide();
+        ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
+        const shake = G.fx.shakeOffset;
+        const cam = { x: G.cam.x + shake.x, y: G.cam.y + shake.y };
+        G.world.draw(ctx, cam, w, h);
+        G.fx.draw(ctx, cam);
+        // 昼夜・ダンジョンの闇(2Dモードのみ。3Dはフォグと空色で表現)
+        const zone = G.world.zone;
+        const dark = zone.dark ? 0.72 : (zone.indoor ? 0 : G.time.darkness());
+        if (dark > 0.01) {
+          const px = G.player.x - cam.x, py = G.player.y - cam.y;
+          const grad = ctx.createRadialGradient(px, py, 60, px, py, zone.dark ? 220 : 420);
+          const moon = G.time.isFullMoon() && !zone.dark ? '20,24,52' : '8,10,22';
+          grad.addColorStop(0, `rgba(${moon},0)`);
+          grad.addColorStop(1, `rgba(${moon},${dark})`);
+          ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+        }
       }
       G.ui.draw(ctx, w, h);
+    } else {
+      ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
     }
 
     // モードオーバーレイ

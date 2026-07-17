@@ -148,6 +148,10 @@ G.Magic = (() => {
 
   const aimAngle = p => {
     if (!G.input.touchMode && (G.input.mouse.x || G.input.mouse.y)) {
+      if (G.R3D && G.R3D.active()) {
+        const mw = G.R3D.mouseWorld();
+        if (mw) return G.U.angTo(p.x, p.y, mw.x, mw.y);
+      }
       return G.U.angTo(p.x, p.y, G.cam.x + G.input.mouse.x, G.cam.y + G.input.mouse.y);
     }
     return p.facing;
