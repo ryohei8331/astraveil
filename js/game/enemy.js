@@ -626,17 +626,51 @@ G.Enemy = (() => {
 
     switch (sh) {
       case 'wolf': {
-        ctx.fillStyle = bodyCol;
-        ctx.beginPath(); ctx.ellipse(px, py - 4, S * 1.4, S * 0.85, 0, 0, 7); ctx.fill();
-        // 頭
-        const hx = px + Math.cos(e.facing) * S * 1.2, hy = py - 6 + Math.sin(e.facing) * S * 0.6;
-        ctx.beginPath(); ctx.arc(hx, hy, S * 0.62, 0, 7); ctx.fill();
-        // 耳
-        ctx.beginPath(); ctx.moveTo(hx - 4, hy - S * 0.5); ctx.lineTo(hx - 1, hy - S * 1.1); ctx.lineTo(hx + 2, hy - S * 0.5); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(hx + 2, hy - S * 0.5); ctx.lineTo(hx + 5, hy - S * 1.05); ctx.lineTo(hx + 7, hy - S * 0.45); ctx.fill();
-        // 眼
+        const baseHex = flash ? '#ffffff' : (e.def.color || '#8a6a4a');
+        const running = e.aggro && (e.state === 'chase' || e.state === 'lunge');
+        const gait = running ? Math.sin(G.world.animT * 18 + e.x * 0.1) : Math.sin(G.world.animT * 2 + e.x * 0.1) * 0.2;
+        // 脚(走行サイクル)
+        ctx.strokeStyle = G.Sprite.shade(baseHex, -0.35); ctx.lineWidth = 3; ctx.lineCap = 'round';
+        for (let i = 0; i < 4; i++) {
+          const lx = px + (i - 1.5) * S * 0.6;
+          const ph = gait * (i % 2 ? 1 : -1);
+          ctx.beginPath();
+          ctx.moveTo(lx, py - 3);
+          ctx.lineTo(lx + ph * 4, py + S * 0.55);
+          ctx.stroke();
+        }
+        // 胴(グラデ+輪郭)
+        const wg = ctx.createLinearGradient(px, py - 4 - S, px, py + S * 0.5);
+        wg.addColorStop(0, G.Sprite.shade(baseHex, 0.22));
+        wg.addColorStop(1, G.Sprite.shade(baseHex, -0.25));
+        ctx.fillStyle = wg;
+        ctx.beginPath(); ctx.ellipse(px, py - 5 + Math.abs(gait) * 1.5, S * 1.45, S * 0.8, 0, 0, 7);
+        ctx.fill();
+        ctx.lineWidth = 1.6; ctx.strokeStyle = G.Sprite.OUTLINE; ctx.stroke();
+        // 尻尾(なびき)
+        const ta = e.facing + Math.PI;
+        ctx.strokeStyle = G.Sprite.shade(baseHex, -0.1); ctx.lineWidth = 3.4;
+        ctx.beginPath();
+        ctx.moveTo(px + Math.cos(ta) * S * 1.3, py - 8);
+        ctx.quadraticCurveTo(
+          px + Math.cos(ta) * S * 1.9, py - 14 - Math.sin(G.world.animT * (running ? 12 : 3)) * 3,
+          px + Math.cos(ta) * S * 2.2, py - 10);
+        ctx.stroke();
+        // 頭+耳+眼
+        const hx = px + Math.cos(e.facing) * S * 1.25, hy = py - 8 + Math.sin(e.facing) * S * 0.6;
+        ctx.fillStyle = wg;
+        ctx.beginPath(); ctx.arc(hx, hy, S * 0.62, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = G.Sprite.shade(baseHex, -0.15);
+        ctx.beginPath(); ctx.moveTo(hx - 4, hy - S * 0.5); ctx.lineTo(hx - 1, hy - S * 1.15); ctx.lineTo(hx + 2, hy - S * 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(hx + 2, hy - S * 0.5); ctx.lineTo(hx + 5, hy - S * 1.05); ctx.lineTo(hx + 7, hy - S * 0.45); ctx.closePath(); ctx.fill(); ctx.stroke();
+        // 鼻先
+        ctx.fillStyle = G.Sprite.shade(baseHex, 0.1);
+        ctx.beginPath(); ctx.ellipse(hx + Math.cos(e.facing) * S * 0.45, hy + 1, S * 0.32, S * 0.2, e.facing, 0, 7); ctx.fill();
+        // 眼(残光)
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = e.def.eyeColor || '#ffd75e';
-        ctx.beginPath(); ctx.arc(hx + Math.cos(e.facing) * 3, hy - 2, 1.8, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx + Math.cos(e.facing) * 3, hy - 2.5, 1.9, 0, 7); ctx.fill();
+        ctx.restore();
         if (e.def.unique) { // 七凶星オーラ
           ctx.strokeStyle = `rgba(160,80,220,${0.4 + 0.3 * Math.sin(G.world.animT * 4)})`;
           ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py - 4, S * 1.8, 0, 7); ctx.stroke();
@@ -804,25 +838,46 @@ G.Enemy = (() => {
         ctx.beginPath(); ctx.moveTo(px - S, py - 10); ctx.lineTo(px + S, py - 10); ctx.stroke();
         break;
       }
-      default: { // blob(ゴブリン等)
-        ctx.fillStyle = bodyCol;
-        ctx.beginPath(); ctx.arc(px, py - 4, S, 0, 7); ctx.fill();
+      default: { // blob(ゴブリン等): ぷにぷに+輪郭+2トーン
+        const sq = 1 + Math.sin(e.spawnT * 4.2) * 0.05 - (e.state === 'windup' ? 0.14 : 0) + (e.state === 'lunge' ? 0.10 : 0);
+        const baseHex = flash ? '#ffffff' : (e.def.color || '#8a5a44');
+        const bg = ctx.createRadialGradient(px - S * 0.35, py - 4 - S * 0.45, S * 0.15, px, py - 4, S * 1.15);
+        bg.addColorStop(0, flash ? '#fff' : G.Sprite.shade(baseHex, 0.28));
+        bg.addColorStop(1, flash ? '#eee' : G.Sprite.shade(baseHex, -0.22));
+        // 足(ちょこん)
+        ctx.fillStyle = G.Sprite.shade(baseHex, -0.4);
+        for (const sd of [-1, 1]) {
+          ctx.beginPath(); ctx.ellipse(px + sd * S * 0.45, py + S * 0.62, S * 0.26, S * 0.16, 0, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.ellipse(px, py - 4, S * (2 - sq), S * sq, 0, 0, 7);
+        ctx.fill();
+        ctx.lineWidth = 1.6; ctx.strokeStyle = G.Sprite.OUTLINE; ctx.stroke();
+        // ハイライト
+        ctx.fillStyle = 'rgba(255,255,255,.18)';
+        ctx.beginPath(); ctx.ellipse(px - S * 0.3, py - 4 - S * 0.4, S * 0.32, S * 0.2, -0.5, 0, 7); ctx.fill();
         // 耳/角
         if (e.def.horns) {
           ctx.fillStyle = '#dfe6ee';
-          ctx.beginPath(); ctx.moveTo(px - S * 0.6, py - S); ctx.lineTo(px - S * 0.4, py - S * 1.6); ctx.lineTo(px - S * 0.2, py - S); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(px + S * 0.2, py - S); ctx.lineTo(px + S * 0.4, py - S * 1.6); ctx.lineTo(px + S * 0.6, py - S); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(px - S * 0.6, py - S); ctx.lineTo(px - S * 0.4, py - S * 1.6); ctx.lineTo(px - S * 0.2, py - S); ctx.closePath();
+          ctx.fill(); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(px + S * 0.2, py - S); ctx.lineTo(px + S * 0.4, py - S * 1.6); ctx.lineTo(px + S * 0.6, py - S); ctx.closePath();
+          ctx.fill(); ctx.stroke();
         }
-        // 眼
-        ctx.fillStyle = e.def.eyeColor || '#ff4a4a';
+        // 眼(発光)
         const ex3 = Math.cos(e.facing) * 2.5, ey3 = Math.sin(e.facing) * 1.5;
-        ctx.beginPath(); ctx.arc(px + ex3 - 3, py - 6 + ey3, 1.8, 0, 7); ctx.fill();
-        ctx.beginPath(); ctx.arc(px + ex3 + 3, py - 6 + ey3, 1.8, 0, 7); ctx.fill();
+        ctx.fillStyle = e.def.eyeColor || '#ff4a4a';
+        for (const sd of [-1, 1]) {
+          ctx.beginPath(); ctx.ellipse(px + ex3 + sd * 3, py - 6 + ey3, 1.7, e.aggro ? 2.3 : 1.7, 0, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(255,255,255,.8)';
+        ctx.beginPath(); ctx.arc(px + ex3 - 3.5, py - 7 + ey3, 0.6, 0, 7); ctx.fill();
         if (e.isLeader) { // 統率個体の王冠
           ctx.fillStyle = '#ffd75e';
           ctx.beginPath();
           ctx.moveTo(px - 5, py - S - 3); ctx.lineTo(px - 3, py - S - 9); ctx.lineTo(px, py - S - 4);
-          ctx.lineTo(px + 3, py - S - 9); ctx.lineTo(px + 5, py - S - 3); ctx.closePath(); ctx.fill();
+          ctx.lineTo(px + 3, py - S - 9); ctx.lineTo(px + 5, py - S - 3); ctx.closePath();
+          ctx.fill(); ctx.stroke();
         }
       }
     }

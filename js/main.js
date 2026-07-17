@@ -157,6 +157,7 @@ G.game = {
     const wdt = dt * g.timeScale;
     G.time.update(wdt);
     G.world.update(wdt);
+    G.fx.ambientUpdate(wdt); // 環境パーティクル(蛍・花びら・泡…)
     if (G.player && !G.player.dead) G.player.update(wdt);
     if (G.input.pressed('menu')) G.menus.open();
 

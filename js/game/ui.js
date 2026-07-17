@@ -141,10 +141,21 @@ G.ui = (() => {
     }
     ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
 
-    // 左上: HP/MP/STM/満腹
+    // 左上: HP/MP/STM/満腹(HPはダメージの残像つき)
     const bx = 12, bw = Math.min(210, w * 0.4);
-    bar(ctx, bx, 12, bw, 14, p.hp / p.hpMax, p.hp / p.hpMax < 0.25 ? '#ff4a4a' : '#e05656');
-    ctx.fillStyle = '#fff'; ctx.fillText(`HP ${Math.ceil(p.hp)}/${p.hpMax}`, bx + 5, 23);
+    if (S.lagHp === null || S.lagHp < p.hp) S.lagHp = p.hp;
+    S.lagHp += (p.hp - S.lagHp) * 0.045;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(bx, 12, bw, 14);
+    ctx.fillStyle = 'rgba(255,150,120,.55)';
+    ctx.fillRect(bx, 12, bw * G.U.clamp(S.lagHp / p.hpMax, 0, 1), 14);
+    const hpg = ctx.createLinearGradient(bx, 12, bx, 26);
+    const hpc = p.hp / p.hpMax < 0.25 ? ['#ff7a6a', '#c03030'] : ['#f08080', '#c04040'];
+    hpg.addColorStop(0, hpc[0]); hpg.addColorStop(1, hpc[1]);
+    ctx.fillStyle = hpg;
+    ctx.fillRect(bx, 12, bw * G.U.clamp(p.hp / p.hpMax, 0, 1), 14);
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, 12.5, bw - 1, 13);
+    ctx.fillStyle = '#fff'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
+    ctx.fillText(`HP ${Math.ceil(p.hp)}/${p.hpMax}`, bx + 5, 23);
     bar(ctx, bx, 28, bw * 0.85, 9, p.mp / p.mpMax, '#5e8fd0');
     ctx.fillStyle = '#cfe0ff'; ctx.font = '8px sans-serif'; ctx.fillText(`MP ${Math.ceil(p.mp)}`, bx + 4, 35.5);
     bar(ctx, bx, 39, bw * 0.75, 9, p.stm / p.stmMax, p.hunger <= 20 ? '#8a8a4a' : '#6fbf5e');
@@ -371,6 +382,17 @@ G.ui = (() => {
     // タッチコントロール
     if (G.input.touchMode) drawTouch(ctx, w, h);
 
+    // ビネット(画面端をそっと締める)
+    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(4,8,18,.32)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+    // 画面フラッシュ(クリティカル・落雷)
+    const fl = G.fx.flashInfo;
+    if (fl.a > 0) {
+      ctx.globalAlpha = fl.a; ctx.fillStyle = fl.color;
+      ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
+    }
     // バナー
     let by2 = 100;
     for (const b of S.banners) {

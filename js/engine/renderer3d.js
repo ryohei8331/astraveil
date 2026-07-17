@@ -5,6 +5,7 @@
 G.R3D = (() => {
   const T = G.TILE;
   let gl = null, glCanvas = null, prog = null, ok = false;
+  let skyProg = null, skyVbo = null;
   let zoneKey = null, vbo = null, vertCount = 0;
   let waterVbo = null, waterCount = 0;
   let cam = null;
@@ -39,12 +40,46 @@ G.R3D = (() => {
 
   const VSH = `
 attribute vec3 aPos; attribute vec4 aCol;
-uniform mat4 uVP; uniform vec3 uTint;
+uniform mat4 uVP; uniform vec3 uTint; uniform float uTime;
 varying vec4 vCol; varying float vDepth;
 void main(){
-  gl_Position = uVP * vec4(aPos, 1.0);
-  vCol = vec4(aCol.rgb * uTint, aCol.a);
+  vec3 p = aPos;
+  float glint = 0.0;
+  if (aCol.a < 0.9) { // 水面: 波でうねり、頂点ごとに煌めく
+    float w = sin(uTime*2.1 + p.x*0.085 + p.z*0.06) + sin(uTime*3.3 + p.z*0.11);
+    p.y += w * 1.4;
+    glint = max(0.0, w) * 0.07;
+  }
+  gl_Position = uVP * vec4(p, 1.0);
+  vCol = vec4(aCol.rgb * uTint + glint, aCol.a);
   vDepth = gl_Position.w;
+}`;
+  // 空: グラデーション+太陽/月+星(全て手続き生成)
+  const VSKY = `
+attribute vec2 aP; varying vec2 vP;
+void main(){ vP = aP; gl_Position = vec4(aP, 0.9995, 1.0); }`;
+  const FSKY = `
+precision mediump float; varying vec2 vP;
+uniform vec3 uZen, uHor, uCelCol;
+uniform vec2 uCel; uniform float uCelR, uStar, uAspect;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+void main(){
+  float ty = clamp(vP.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 col = mix(uHor, uZen, pow(ty, 1.35));
+  vec2 sp = vec2(vP.x * uAspect, vP.y);
+  vec2 cp = vec2(uCel.x * uAspect, uCel.y);
+  float d = distance(sp, cp);
+  col += uCelCol * (smoothstep(uCelR, uCelR * 0.55, d) + 0.32 * smoothstep(uCelR * 3.4, uCelR, d));
+  if (uStar > 0.01) {
+    vec2 g = floor(sp * 85.0);
+    float h = hash(g);
+    if (h > 0.994) {
+      vec2 c = (g + 0.5) / 85.0;
+      float dd = distance(sp, c);
+      col += vec3(1.0) * uStar * smoothstep(0.0045, 0.0, dd) * (0.4 + 0.6 * hash(g + 7.0));
+    }
+  }
+  gl_FragColor = vec4(col, 1.0);
 }`;
   const FSH = `
 precision mediump float;
@@ -76,6 +111,15 @@ void main(){
       gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FSH));
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link failed');
+      // 空プログラム
+      skyProg = gl.createProgram();
+      gl.attachShader(skyProg, sh(gl.VERTEX_SHADER, VSKY));
+      gl.attachShader(skyProg, sh(gl.FRAGMENT_SHADER, FSKY));
+      gl.linkProgram(skyProg);
+      if (!gl.getProgramParameter(skyProg, gl.LINK_STATUS)) throw new Error('sky link failed');
+      skyVbo = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, skyVbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       gl.enable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -124,10 +168,28 @@ void main(){
     const pos = [], col = [], wpos = [], wcol = [];
     const push = (arrP, arrC, verts, c, shade, alpha) => {
       const idx = [0, 1, 2, 0, 2, 3];
+      const sh = Array.isArray(shade) ? shade : [shade, shade, shade, shade];
       for (const i of idx) {
         arrP.push(verts[i][0], verts[i][1], verts[i][2]);
-        arrC.push(c[0] * shade, c[1] * shade, c[2] * shade, alpha !== undefined ? alpha : 1);
+        arrC.push(c[0] * sh[i], c[1] * sh[i], c[2] * sh[i], alpha !== undefined ? alpha : 1);
       }
+    };
+    // AO: 高い隣接タイルが落とす淡い影(コーナー単位)
+    const tallAt = (tx, ty) => {
+      if (ty < 0 || tx < 0 || ty >= S.th || tx >= S.tw) return true;
+      const cc = S.grid[ty][tx];
+      return (HEIGHT[cc] || 0) > 0 || cc === ' ';
+    };
+    const floorAO = (tx, ty) => {
+      const corner = (dx, dy) => {
+        let n = 0;
+        if (tallAt(tx + dx, ty)) n++;
+        if (tallAt(tx, ty + dy)) n++;
+        if (tallAt(tx + dx, ty + dy)) n++;
+        return 1 - 0.13 * Math.min(n, 2);
+      };
+      // 頂点順 [x0z0, x1z0, x1z1, x0z1]
+      return [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
     };
     const boxAtY = (p, cl, x, z, size, y0, y1, c, a) => {
       const x1 = x + size, z1 = z + size;
@@ -167,16 +229,21 @@ void main(){
         let hgt = HEIGHT[c] || 0;
         if (hgt && gateOpen(c)) hgt = 0;
         if (hgt === 0) {
-          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], base, 1);
+          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], base, floorAO(tx, ty));
           const h2 = G.U.hash2(tx, ty);
           if (c === 'h' && h2 > 0.3) boxAtY(pos, col, x0 + 8 + h2 * 10, z0 + 8 + (1 - h2) * 10, 6, 0, 7, [0.12, 0.3, 0.12], 1);
           if (c === 'F') boxAtY(pos, col, x0 + 8 + h2 * 14, z0 + 8 + (1 - h2) * 12, 4, 0, 6, hexRGB(['#ff8fa3', '#ffd75e', '#c9a0ff', '#ffffff'][Math.floor(h2 * 4)]), 1);
           if (c === 'g') boxAtY(pos, col, x0 + T / 2 - 3, z0 + T / 2 - 3, 6, 0, 2.5, [0.36, 0.93, 0.83], 1);
         } else if (c === 'T') {
-          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], hexRGB(pal[1]), 1);
+          // 樹: 個体差(サイズ・色・高さのゆらぎ)で森に生命感を
+          const j = G.U.hash2(tx * 3 + 1, ty * 7 + 2);
+          const cs = 1 + (j - 0.5) * 0.36;
+          const canopy = base.map(v => Math.min(1, v * (0.85 + j * 0.4)));
+          const hTop = 34 + j * 10;
+          push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], hexRGB(pal[1]), floorAO(tx, ty));
           boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, 0, 16, [0.35, 0.27, 0.19], 1);
-          boxAtY(pos, col, x0 + 3, z0 + 3, T - 6, 14, 26, base, 1);
-          boxAtY(pos, col, x0 + 8, z0 + 8, T - 16, 26, 38, [Math.min(1, base[0] * 1.15), Math.min(1, base[1] * 1.15), Math.min(1, base[2] * 1.15)], 1);
+          boxAtY(pos, col, x0 + T / 2 - (T - 6) * cs / 2, z0 + T / 2 - (T - 6) * cs / 2, (T - 6) * cs, 13, 25 + j * 4, canopy, 1);
+          boxAtY(pos, col, x0 + T / 2 - (T - 16) * cs / 2, z0 + T / 2 - (T - 16) * cs / 2, (T - 16) * cs, 25 + j * 4, hTop, [Math.min(1, canopy[0] * 1.2), Math.min(1, canopy[1] * 1.2), Math.min(1, canopy[2] * 1.2)], 1);
         } else if (c === 'D' || c === 'M') {
           push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], hexRGB(pal[1]), 1);
           boxAtY(pos, col, x0, z0 + 10, 7, 0, hgt, base, 1);
@@ -266,21 +333,66 @@ void main(){
     if (key !== zoneKey) { zoneKey = key; buildZone(); }
     updateCamera(w, h);
 
-    const dark = G.world.zone.dark ? 0.8 : G.time.darkness();
-    const und = G.world.zone.underwater;
-    const sky = und ? [0.03, 0.09, 0.16] : [
-      G.U.lerp(0.45, 0.03, dark), G.U.lerp(0.62, 0.04, dark), G.U.lerp(0.80, 0.10, dark),
-    ];
-    const tint = und ? [0.55, 0.75, 0.95] : [1 - dark * 0.55, 1 - dark * 0.5, 1 - dark * 0.3];
+    // ---- 時刻から空・光を決定(朝焼け/白昼/黄昏/星月夜) ----
+    const zone = G.world.zone;
+    const frac = G.time.frac();
+    const dark = zone.dark ? 0.8 : G.time.darkness();
+    const und = zone.underwater;
+    const dusk = Math.max(0, 1 - Math.abs(frac - 0.575) / 0.055) + Math.max(0, 1 - Math.abs(frac - 0.06) / 0.05);
+    const L3 = (a, b, t2) => [G.U.lerp(a[0], b[0], t2), G.U.lerp(a[1], b[1], t2), G.U.lerp(a[2], b[2], t2)];
+    let zen = L3([0.30, 0.52, 0.86], [0.015, 0.03, 0.09], G.U.clamp(dark / 0.62, 0, 1));
+    let hor = L3([0.72, 0.84, 0.96], [0.09, 0.11, 0.20], G.U.clamp(dark / 0.62, 0, 1));
+    hor = [Math.min(1, hor[0] + 0.42 * dusk), Math.min(1, hor[1] + 0.13 * dusk), Math.max(0, hor[2] - 0.06 * dusk)];
+    zen = [Math.min(1, zen[0] + 0.09 * dusk), zen[1] + 0.02 * dusk, zen[2]];
+    if (und) { zen = [0.01, 0.05, 0.11]; hor = [0.04, 0.13, 0.22]; }
+    if (zone.dark) { zen = [0.02, 0.02, 0.045]; hor = [0.05, 0.05, 0.095]; }
+    // 太陽と月(月は月齢で明るさが変わる)
+    let celPos = [0, -2], celCol = [0, 0, 0], celR = 0.0;
+    if (!und && !zone.dark) {
+      const dayT = (frac - 0.05) / 0.5;
+      if (dayT >= 0 && dayT <= 1) {
+        celPos = [G.U.lerp(-0.85, 0.85, dayT), Math.sin(dayT * Math.PI) * 0.75 - 0.18];
+        celCol = [1.0, 0.9 - 0.25 * dusk, 0.62 - 0.22 * dusk];
+        celR = 0.08;
+      } else {
+        const nightT = frac >= 0.55 ? (frac - 0.55) / 0.5 : (frac + 0.45) / 0.5;
+        const mb = 0.35 + 0.65 * (1 - Math.abs(G.time.moonPhase() - 4) / 4);
+        celPos = [G.U.lerp(-0.85, 0.85, nightT), Math.sin(nightT * Math.PI) * 0.7 - 0.12];
+        celCol = [0.72 * mb, 0.76 * mb, 0.95 * mb];
+        celR = 0.055;
+      }
+    }
+    const starAmt = (!und && !zone.dark && dark > 0.32) ? G.U.clamp((dark - 0.32) / 0.28, 0, 1) : 0;
+    const tint = und ? [0.55, 0.75, 0.95]
+      : [Math.min(1.05, 1 - dark * 0.55 + 0.10 * dusk), 1 - dark * 0.5 + 0.02 * dusk, 1 - dark * 0.26];
 
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-    gl.clearColor(sky[0], sky[1], sky[2], 1);
+    gl.clearColor(hor[0], hor[1], hor[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // 空(フルスクリーン・手続きシェーダ)
+    gl.useProgram(skyProg);
+    gl.depthMask(false);
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyVbo);
+    const aP = gl.getAttribLocation(skyProg, 'aP');
+    gl.enableVertexAttribArray(aP);
+    gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 8, 0);
+    gl.uniform3fv(gl.getUniformLocation(skyProg, 'uZen'), zen);
+    gl.uniform3fv(gl.getUniformLocation(skyProg, 'uHor'), hor);
+    gl.uniform3fv(gl.getUniformLocation(skyProg, 'uCelCol'), celCol);
+    gl.uniform2fv(gl.getUniformLocation(skyProg, 'uCel'), celPos);
+    gl.uniform1f(gl.getUniformLocation(skyProg, 'uCelR'), celR);
+    gl.uniform1f(gl.getUniformLocation(skyProg, 'uStar'), starAmt);
+    gl.uniform1f(gl.getUniformLocation(skyProg, 'uAspect'), cam.aspect);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.depthMask(true);
+
     gl.useProgram(prog);
     gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uVP'), false, cam.vp);
     gl.uniform3fv(gl.getUniformLocation(prog, 'uTint'), tint);
-    gl.uniform3fv(gl.getUniformLocation(prog, 'uFog'), sky);
-    gl.uniform1f(gl.getUniformLocation(prog, 'uFogDen'), G.world.zone.dark ? 3.2 : (und ? 2.6 : 1.0));
+    gl.uniform3fv(gl.getUniformLocation(prog, 'uFog'), hor);
+    gl.uniform1f(gl.getUniformLocation(prog, 'uFogDen'), zone.dark ? 3.2 : (und ? 2.6 : 1.0));
+    gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), G.world.animT);
 
     const bindDraw = (buf, n, alphaPass) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
@@ -312,6 +424,36 @@ void main(){
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     G.fx.drawProjected(ctx, (x, y) => projectXZ(x, 0, y));
+
+    // ---- 発光タイルのグロー(水晶・溶岩・遺構・月門・気泡孔) ----
+    const S3 = G.world.S;
+    const p0x = Math.floor(G.player.x / T), p0y = Math.floor(G.player.y / T);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    let gcount = 0;
+    for (let ty2 = Math.max(0, p0y - 11); ty2 <= Math.min(S3.th - 1, p0y + 11) && gcount < 70; ty2++) {
+      for (let tx2 = Math.max(0, p0x - 13); tx2 <= Math.min(S3.tw - 1, p0x + 13) && gcount < 70; tx2++) {
+        const cch = S3.grid[ty2][tx2];
+        let colG = null, rad = 26, hgtG = 10, alp = 0.30;
+        if (cch === 'c') { colG = '140,220,255'; hgtG = 16; }
+        else if (cch === 'l') { colG = '255,140,60'; rad = 32; alp = 0.42; hgtG = 2; }
+        else if (cch === 'g') { colG = '94,236,212'; hgtG = 3; }
+        else if (cch === 'o') { colG = '160,215,255'; hgtG = 6; }
+        else if (cch === 'M' && G.time.isFullMoon() && G.time.isNight()) { colG = '210,220,255'; rad = 44; hgtG = 32; alp = 0.5; }
+        if (!colG) continue;
+        const pr2 = projectXZ(tx2 * T + 16, hgtG, ty2 * T + 16);
+        if (!pr2) continue;
+        const fl2 = 0.72 + 0.28 * Math.sin(G.world.animT * 3 + tx2 * 2.3 + ty2 * 1.7);
+        const rr2 = Math.max(4, rad * pr2.scale * fl2);
+        const gg = ctx.createRadialGradient(pr2.x, pr2.y, 0, pr2.x, pr2.y, rr2);
+        gg.addColorStop(0, `rgba(${colG},${alp * fl2})`);
+        gg.addColorStop(1, `rgba(${colG},0)`);
+        ctx.fillStyle = gg;
+        ctx.beginPath(); ctx.arc(pr2.x, pr2.y, rr2, 0, 7); ctx.fill();
+        gcount++;
+      }
+    }
+    ctx.restore();
   };
 
   const hide = () => { if (glCanvas) glCanvas.style.display = 'none'; };

@@ -10,16 +10,20 @@ G.NPC = (() => {
   };
 
   const drawHuman = (ctx, px, py, opt = {}) => {
-    ctx.fillStyle = 'rgba(0,0,0,.28)';
-    ctx.beginPath(); ctx.ellipse(px, py + 8, 8, 3.5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = opt.body || '#7a5c3a';
-    ctx.beginPath(); ctx.arc(px, py - 4, 7.5, 0, 7); ctx.fill();
-    ctx.fillStyle = opt.skin || '#f2cfa5';
-    ctx.beginPath(); ctx.arc(px, py - 13.5, 6, 0, 7); ctx.fill();
-    ctx.fillStyle = opt.hair || '#3a2c22';
-    ctx.beginPath(); ctx.arc(px, py - 15.5, 5.6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill();
-    ctx.fillStyle = '#222';
-    ctx.fillRect(px - 2.6, py - 14.5, 1.5, 2.2); ctx.fillRect(px + 1.1, py - 14.5, 1.5, 2.2);
+    G.Sprite.humanoid(ctx, {
+      x: px, y: py + 8,
+      t: opt.t !== undefined ? opt.t : (Date.now() / 1000) % 3600,
+      moving: !!opt.moving,
+      facing: opt.facing !== undefined ? opt.facing : Math.PI / 2, // 既定は正面(南向き)
+      body: opt.body || '#7a5c3a', skin: opt.skin, hair: opt.hair,
+      hairStyle: opt.hairStyle || 0,
+      weapon: opt.weapon || 'none',
+      cape: opt.cape || null,
+    });
+  };
+  const hairOf = id => { // idから決定的に髪型を選ぶ
+    let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return Math.abs(h) % 4;
   };
 
   // ---- 一般NPC ----
@@ -58,7 +62,7 @@ G.NPC = (() => {
       draw(ctx, cam) {
         if (def.visibleCond && !G.quests.conds[def.visibleCond]()) return;
         const px = this.x - cam.x, py = this.y - cam.y;
-        drawHuman(ctx, px, py + Math.sin(this.t * 2) * 0.8, def.look || {});
+        drawHuman(ctx, px, py, { ...(def.look || {}), t: this.t, hairStyle: hairOf(this.id) });
         if (def.emblem) {
           ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
           ctx.fillText(def.emblem, px, py - 26); ctx.textAlign = 'left';
@@ -169,6 +173,7 @@ G.NPC = (() => {
     return {
       kind: 'fake', x, y, r: 10, dead: false, t: G.U.rnd(10),
       name, clan, friendDef, bubble: null, bubbleT: 0, wanderDir: null, wanderT: 0,
+      gearLook: G.U.choice(['sword', 'sword', 'none', 'staff', 'bow', 'spear', 'dual']),
       update(dt) {
         this.t += dt;
         this.wanderT -= dt;
@@ -204,7 +209,13 @@ G.NPC = (() => {
       },
       draw(ctx, cam) {
         const px = this.x - cam.x, py = this.y - cam.y;
-        drawHuman(ctx, px, py + Math.sin(this.t * 2.4) * 0.8, { body: bodyCol, hair: G.U.hash2(px | 0, 7) > 0.5 ? '#3a2c22' : '#6e5540' });
+        drawHuman(ctx, px, py, {
+          body: bodyCol, hair: hairOf(this.name) % 2 ? '#3a2c22' : '#6e5540',
+          t: this.t, hairStyle: hairOf(this.name),
+          moving: this.wanderDir !== null && this.wanderDir !== undefined,
+          facing: this.wanderDir !== null && this.wanderDir !== undefined ? this.wanderDir : Math.PI / 2,
+          weapon: this.gearLook,
+        });
         const tag = this.clan ? G.DATA.flavor.clanTags[this.clan] : '';
         nameplate(ctx, px, py - 30, `${tag}${this.name}`, this.friendDef && !G.player.friends.some(f => f.name === this.name) ? '#7ee0a3' : '#a8c8f0');
         if (this.friendDef && !G.player.friends.some(f => f.name === this.name)) {
@@ -280,7 +291,11 @@ G.NPC = (() => {
       },
       draw(ctx, cam) {
         const px = this.x - cam.x, py = this.y - cam.y;
-        drawHuman(ctx, px, py + Math.sin(this.t * 3) * 0.8, { body: '#2e8a6e' });
+        drawHuman(ctx, px, py, {
+          body: '#2e8a6e', t: this.t, moving: !!this.target, hairStyle: hairOf(this.name),
+          facing: this.facing !== undefined ? this.facing : Math.PI / 2,
+          weapon: { '剣士': 'sword', '魔法使い': 'staff', '格闘家': 'fist', '弓使い': 'bow' }[this.style] || 'sword',
+        });
         const fl = G.DATA.flavor;
         nameplate(ctx, px, py - 30, `${friend.clan ? fl.clanTags[friend.clan] || '' : ''}${this.name}`, '#7ee0a3');
         // 残り時間ゲージ

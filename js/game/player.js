@@ -367,49 +367,51 @@ G.Player = (() => {
         list[0].interact(this);
       },
 
-      // ---- 描画 ----
+      // ---- 描画(スプライトレンダラー) ----
       draw(ctx, cam) {
         const px = this.x - cam.x, py = this.y - cam.y;
         const hop = this.airborne ? -16 - Math.sin((0.55 - this.jumpT) / 0.55 * Math.PI) * 14 : 0;
-        const bob = (!this.airborne && (this.walkT || 0) > 0) ? Math.sin(this.walkT * 12) * 1.5 : 0;
         ctx.save();
-        // 影
-        ctx.fillStyle = 'rgba(0,0,0,.3)';
-        ctx.beginPath(); ctx.ellipse(px, py + 8, 9, 4, 0, 0, 7); ctx.fill();
-        if (this.stealthT > 0) ctx.globalAlpha = 0.35;
-        if (this.invulnT > 0 && Math.sin(this.playT * 40) > 0) ctx.globalAlpha *= 0.55;
-        const oy = py + hop + bob;
-        // バフオーラ
-        if (this.hasBuff('bloodgear')) { ctx.strokeStyle = 'rgba(255,80,80,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, oy - 6, 15 + Math.sin(this.playT * 8) * 2, 0, 7); ctx.stroke(); }
-        if (this.hasBuff('setsuna')) { ctx.strokeStyle = 'rgba(160,220,255,.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, oy - 6, 18, 0, 7); ctx.stroke(); }
-        if (this.hasBuff('antigrav')) { ctx.strokeStyle = 'rgba(201,160,255,.5)'; ctx.beginPath(); ctx.arc(px, py + 8, 12, 0, 7); ctx.stroke(); }
-        // 体
-        ctx.fillStyle = this.hurtT > 0 ? '#ff9d9d' : '#3b6ea5';
-        ctx.beginPath(); ctx.arc(px, oy - 4, 8, 0, 7); ctx.fill();
-        // 頭
-        ctx.fillStyle = '#f2cfa5';
-        ctx.beginPath(); ctx.arc(px, oy - 14, 6.5, 0, 7); ctx.fill();
-        // 髪
-        ctx.fillStyle = '#4a3830';
-        ctx.beginPath(); ctx.arc(px, oy - 16, 6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill();
-        // 目(向き)
-        const ex = Math.cos(this.facing) * 2.5, ey = Math.sin(this.facing) * 1.5;
-        ctx.fillStyle = '#222';
-        ctx.fillRect(px + ex - 2.4, oy - 15 + ey, 1.6, 2.4); ctx.fillRect(px + ex + 1, oy - 15 + ey, 1.6, 2.4);
-        // 武器スイング
-        if (this.attackT > 0 || (this.swingFxT || 0) > 0) {
-          if (this.swingFxT > 0) this.swingFxT -= 1 / 60;
-          const prog = 1 - this.attackT / (this.attackDur || 0.3);
-          const a0 = this.facing - 1.4 + prog * 2.8;
-          ctx.strokeStyle = this.hasBuff('shirogane') ? '#e8e8ff' : '#dfe6ee';
-          ctx.lineWidth = 3; ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(px + Math.cos(a0) * 8, oy - 6 + Math.sin(a0) * 8);
-          ctx.lineTo(px + Math.cos(a0) * 26, oy - 6 + Math.sin(a0) * 26);
-          ctx.stroke();
-          ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 6;
-          ctx.beginPath(); ctx.arc(px, oy - 6, 22, this.facing - 1.2, a0); ctx.stroke();
+        if (this.airborne) { // 空中でも影は地面に落ちる
+          ctx.fillStyle = 'rgba(10,8,16,.3)';
+          ctx.beginPath(); ctx.ellipse(px, py + 8, 8, 3.2, 0, 0, 7); ctx.fill();
         }
+        if (this.stealthT > 0) ctx.globalAlpha = 0.35;
+        if (this.invulnT > 0 && this.dodgeT <= 0 && Math.sin(this.playT * 40) > 0) ctx.globalAlpha *= 0.55;
+        const oy = py + hop - 6;
+        // バフオーラ
+        if (this.hasBuff('bloodgear')) { ctx.strokeStyle = 'rgba(255,80,80,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, oy - 6, 16 + Math.sin(this.playT * 8) * 2, 0, 7); ctx.stroke(); }
+        if (this.hasBuff('setsuna')) { ctx.strokeStyle = 'rgba(160,220,255,.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, oy - 6, 19, 0, 7); ctx.stroke(); }
+        if (this.hasBuff('antigrav')) { ctx.strokeStyle = 'rgba(201,160,255,.5)'; ctx.beginPath(); ctx.arc(px, py + 8, 12, 0, 7); ctx.stroke(); }
+        // 回避中の残像
+        if (this.dodgeT > 0) {
+          ctx.save(); ctx.globalAlpha *= 0.3;
+          const look0 = G.Sprite.playerLook(this);
+          G.Sprite.humanoid(ctx, {
+            x: px - Math.cos(this.dodgeDir) * 14, y: py + 8,
+            t: this.playT, facing: this.facing,
+            body: '#3b6ea5', hair: '#4a3830', hairStyle: 2,
+            armor: look0.armor, weapon: 'none', noShadow: true,
+          });
+          ctx.restore();
+        }
+        const ax = G.game.mode === 'play' ? G.input.axis() : { x: 0, y: 0 };
+        const look = G.Sprite.playerLook(this);
+        G.Sprite.humanoid(ctx, {
+          x: px, y: py + 8 + hop,
+          t: this.playT,
+          moving: !this.airborne && !!(ax.x || ax.y),
+          facing: this.facing,
+          body: '#3b6ea5', skin: '#f2cfa5', hair: '#4a3830', hairStyle: 2,
+          armor: look.armor, weapon: look.weapon, weaponGlow: look.weaponGlow, cape: look.cape,
+          attackT: this.attackT > 0 ? 1 - this.attackT / (this.attackDur || 0.3) : null,
+          chargeCol: this.magicCharge ? G.Magic.ELEMENTS[this.magicCharge.el].color : null,
+          trailCol: this.hasBuff('shirogane') ? 'rgba(232,232,255,.4)'
+            : this.hasBuff('bloodgear') ? 'rgba(255,90,90,.35)'
+              : this.hasBuff('oboro') ? 'rgba(143,208,255,.45)' : undefined,
+          hurt: this.hurtT > 0,
+          noShadow: this.airborne,
+        });
         // 呪印(フェンリードのマーキング)
         if (this.curse.level > 0) {
           const ca = this.playT * 2;

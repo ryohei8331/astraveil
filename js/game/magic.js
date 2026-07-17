@@ -124,7 +124,7 @@ G.Magic = (() => {
         this.t += dt;
         if (this.t >= 0.5 && !this.hit) {
           this.hit = true;
-          G.audio.sfx('thunder'); G.fx.shake(7);
+          G.audio.sfx('thunder'); G.fx.shake(7); G.fx.flash('#fffbe0', 0.16);
           G.fx.burst(tx, ty, '#f5e663', 20, 190); G.fx.ring(tx, ty, '#f5e663', 60, 0.4);
           for (const e of G.world.near(tx, ty, 55, x => x.kind === 'enemy' && !x.dead)) {
             G.Combat.playerHit(e, { magic: true, raw: dmg, element: 'volt' });
@@ -166,10 +166,12 @@ G.Magic = (() => {
       x: o.x, y: o.y, vx: o.vx, vy: o.vy, r: o.r || 5,
       dmg: o.dmg, element: o.element, color: o.color || '#fff',
       life: o.life || 2, t: 0, dead: false, pierce: !!o.pierce, homing: o.homing || 0,
-      hitSet: new Set(), zOrder: 100,
+      hitSet: new Set(), zOrder: 100, trail: [],
       onDie: o.onDie, onHitEnemy: o.onHitEnemy, status: o.status, label: o.label,
       update(dt) {
         this.t += dt;
+        this.trail.unshift({ x: this.x, y: this.y });
+        if (this.trail.length > 7) this.trail.pop();
         if (this.t >= this.life) { this.dead = true; if (this.onDie) this.onDie(this.x, this.y); return; }
         if (this.homing && this.kind === 'proj') {
           const cand = G.world.near(this.x, this.y, 160, x => x.kind === 'enemy' && !x.dead && !this.hitSet.has(x));
@@ -204,10 +206,25 @@ G.Magic = (() => {
       },
       draw(ctx, cam) {
         const px = this.x - cam.x, py = this.y - cam.y;
-        ctx.fillStyle = this.color;
-        ctx.beginPath(); ctx.arc(px, py, this.r, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.5)';
-        ctx.beginPath(); ctx.arc(px - this.vx * 0.01, py - this.vy * 0.01, this.r * 0.5, 0, 7); ctx.fill();
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        // 残光トレイル
+        for (let i = 1; i < this.trail.length; i++) {
+          const tp = this.trail[i];
+          const a = (1 - i / this.trail.length) * 0.4;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = this.color;
+          ctx.beginPath(); ctx.arc(tp.x - cam.x, tp.y - cam.y, this.r * (1 - i / this.trail.length * 0.6), 0, 7); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        // 弾本体(コア+グロー)
+        const g = ctx.createRadialGradient(px, py, 0, px, py, this.r * 2.2);
+        g.addColorStop(0, 'rgba(255,255,255,.95)');
+        g.addColorStop(0.45, this.color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(px, py, this.r * 2.2, 0, 7); ctx.fill();
+        ctx.restore();
       },
     });
   };

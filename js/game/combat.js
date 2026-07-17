@@ -108,7 +108,7 @@ G.Combat = (() => {
     });
     G.fx.burst(e.x, e.y - 8, crit ? '#ffd75e' : '#ff6b6b', crit ? 12 : 6, 110);
     G.audio.sfx(crit ? 'crit' : 'hit');
-    if (crit) { G.fx.hitstop(0.07); G.fx.shake(3); }
+    if (crit) { G.fx.hitstop(0.07); G.fx.shake(3); G.fx.flash('#fff3d0', 0.07); }
     // ノックバック
     if (!e.def.noKnockback && !opt.magic) {
       const a = G.U.angTo(p.x, p.y, e.x, e.y);
