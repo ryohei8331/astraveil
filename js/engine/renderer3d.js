@@ -125,18 +125,26 @@ float vn(vec2 p){
   return mix(mix(h2(i), h2(i+vec2(1.,0.)), f.x), mix(h2(i+vec2(0.,1.)), h2(i+vec2(1.,1.)), f.x), f.y);
 }
 void main(){
-  // ---- アルベド(素の色 × 質感) ----
+  // ---- アルベド(素の色 × 質感) + バンプ法線 ----
   vec3 c = vCol.rgb;
+  vec3 N = normalize(vN);
   if (uTexOn > 0.5 && vUV.x >= 0.0) {
+    float o = 1.5 / 256.0;
     float det = texture2D(uTex, vUV).r;
+    float dU = texture2D(uTex, vUV + vec2(o, 0.0)).r - texture2D(uTex, vUV - vec2(o, 0.0)).r;
+    float dV = texture2D(uTex, vUV + vec2(0.0, o)).r - texture2D(uTex, vUV - vec2(0.0, o)).r;
     c *= (0.46 + det * 0.62);
+    // 質感の勾配で法線を傾け、凹凸が光を受ける
+    vec3 up2 = abs(N.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 T = normalize(cross(up2, N));
+    vec3 Bt = cross(N, T);
+    N = normalize(N - (T * dU + Bt * dV) * 2.4);
   } else {
     vec2 q = vW.xz + vW.y * 0.6;
     float g = vn(q * 0.16) * 0.45 + vn(q * 0.75) * 0.35 + vn(q * 3.1) * 0.20;
     c *= (0.92 + g * 0.16);
   }
   // ---- 物理ベース風ライティング(平行光+半球環境光+リム) ----
-  vec3 N = normalize(vN);
   float ndl = max(0.0, dot(N, uSunDir));
   // やわらかい影の縁 + 太陽光
   float sh = smoothstep(0.0, 0.35, ndl);
