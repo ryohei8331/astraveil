@@ -97,7 +97,7 @@ void main(){
   const FSH = `
 precision mediump float;
 varying vec4 vCol; varying float vDepth; varying vec3 vW;
-uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime;
+uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime; uniform float uCldSh;
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float vn(vec2 p){
   vec2 i = floor(p), f = fract(p);
@@ -113,6 +113,10 @@ void main(){
     float sp = vn(vW.xz * 0.9 + vec2(uTime * 0.35, uTime * 0.22));
     c += vec3(0.10, 0.12, 0.13) * smoothstep(0.72, 0.95, sp);
   }
+  if (uCldSh > 0.01) { // ゆっくり流れる雲の影
+    float cs2 = smoothstep(0.55, 0.80, vn(vW.xz * 0.012 + vec2(uTime * 0.009, uTime * 0.004)));
+    c *= 1.0 - cs2 * 0.10 * uCldSh;
+  }
   float f = clamp(1.0 - exp(-uFogDen * vDepth * 0.0016), 0.0, 1.0);
   gl_FragColor = vec4(mix(c, uFog, f), vCol.a);
 }`;
@@ -125,6 +129,7 @@ void main(){
       const ui = document.getElementById('game');
       ui.style.position = 'relative'; ui.style.zIndex = '1';
       document.body.insertBefore(glCanvas, ui);
+      glCanvas.style.filter = 'saturate(1.14) contrast(1.05) brightness(1.02)'; // 色グレーディング
       gl = glCanvas.getContext('webgl', { antialias: true });
       if (!gl) return false;
       const sh = (type, src) => {
@@ -224,11 +229,27 @@ void main(){
   let lampList = [];
 
   // ---- ゾーンメッシュ構築 ----
+  let FACE = { s: 0.8, n: 0.55, e: 0.68, w: 0.68 }; // 太陽方位で更新される面別ライティング
   const buildZone = () => {
     const S = G.world.S;
     const zn = G.world.zone;
     AMP = zn.indoor ? 0 : (zn.town ? 2.5 : (zn.underwater ? 4 : (zn.biome === 'ruins' || zn.biome === 'moon' ? 4 : 9)));
     lampList = [];
+    // 太陽の方位で壁の明るさが回る(朝は東壁、夕は西壁が光る)
+    {
+      const fr = G.time.frac();
+      const sunT = G.U.clamp((fr - 0.20) / 0.60, 0, 1);
+      const day = fr > 0.20 && fr < 0.80;
+      const we = day ? Math.max(0, Math.cos(Math.PI * sunT)) : 0;   // 東(朝)
+      const ww = day ? Math.max(0, -Math.cos(Math.PI * sunT)) : 0;  // 西(夕)
+      const ss = day ? Math.sin(Math.PI * sunT) : 0;                // 南中
+      FACE = {
+        s: 0.60 + 0.28 * ss,
+        n: 0.50 + 0.06 * ss,
+        e: 0.55 + 0.34 * we + 0.08 * ss,
+        w: 0.55 + 0.34 * ww + 0.08 * ss,
+      };
+    }
     const pal = PALBASE[G.world.zone.biome] || PALBASE.grass;
     const pos = [], col = [], wpos = [], wcol = [];
     const push = (arrP, arrC, verts, c, shade, alpha) => {
@@ -259,10 +280,18 @@ void main(){
     const boxAtY = (p, cl, x, z, size, y0, y1, c, a) => {
       const x1 = x + size, z1 = z + size;
       push(p, cl, [[x, y1, z], [x1, y1, z], [x1, y1, z1], [x, y1, z1]], c, 1, a);
-      push(p, cl, [[x, y0, z1], [x1, y0, z1], [x1, y1, z1], [x, y1, z1]], c, 0.8, a);
-      push(p, cl, [[x1, y0, z], [x, y0, z], [x, y1, z], [x1, y1, z]], c, 0.55, a);
-      push(p, cl, [[x1, y0, z1], [x1, y0, z], [x1, y1, z], [x1, y1, z1]], c, 0.68, a);
-      push(p, cl, [[x, y0, z], [x, y0, z1], [x, y1, z1], [x, y1, z]], c, 0.68, a);
+      push(p, cl, [[x, y0, z1], [x1, y0, z1], [x1, y1, z1], [x, y1, z1]], c, FACE.s, a);
+      push(p, cl, [[x1, y0, z], [x, y0, z], [x, y1, z], [x1, y1, z]], c, FACE.n, a);
+      push(p, cl, [[x1, y0, z1], [x1, y0, z], [x1, y1, z], [x1, y1, z1]], c, FACE.e, a);
+      push(p, cl, [[x, y0, z], [x, y0, z1], [x, y1, z1], [x, y1, z]], c, FACE.w, a);
+      // 面取りリム(天面の縁に細い明るみ→ミニチュア模型の質感)
+      if (size >= 10 && (y1 - y0) >= 12) {
+        const rim = 1.24, t2 = 2, ry = y1 + 0.15;
+        push(p, cl, [[x, ry, z], [x1, ry, z], [x1, ry, z + t2], [x, ry, z + t2]], c, rim, a);
+        push(p, cl, [[x, ry, z1 - t2], [x1, ry, z1 - t2], [x1, ry, z1], [x, ry, z1]], c, rim, a);
+        push(p, cl, [[x, ry, z], [x + t2, ry, z], [x + t2, ry, z1], [x, ry, z1]], c, rim, a);
+        push(p, cl, [[x1 - t2, ry, z], [x1, ry, z], [x1, ry, z1], [x1 - t2, ry, z1]], c, rim, a);
+      }
     };
     const gateOpen = c =>
       (c === 'D' && G.world.zone.gateFlag && G.quests.flags[G.world.zone.gateFlag]) ||
@@ -426,7 +455,8 @@ void main(){
 
   const zoneKeyNow = () => {
     const z = G.world;
-    return `${z.zoneId}|${z.zone.gateFlag ? !!G.quests.flags[z.zone.gateFlag] : 0}|${G.time.isFullMoon() && G.time.isNight() ? 1 : 0}`;
+    // 時間帯バケットが変わるとメッシュを組み直し(太陽方位ライティングを回す)
+    return `${z.zoneId}|${z.zone.gateFlag ? !!G.quests.flags[z.zone.gateFlag] : 0}|${G.time.isFullMoon() && G.time.isNight() ? 1 : 0}|b${Math.floor(G.time.frac() * 8)}`;
   };
 
   // ---- カメラ・投影 ----
@@ -550,6 +580,7 @@ void main(){
     gl.uniform3fv(gl.getUniformLocation(prog, 'uFog'), hor);
     gl.uniform1f(gl.getUniformLocation(prog, 'uFogDen'), zone.dark ? 3.2 : (und ? 2.6 : 1.0));
     gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), G.world.animT);
+    gl.uniform1f(gl.getUniformLocation(prog, 'uCldSh'), (und || zone.dark || dark > 0.5) ? 0 : 1);
 
     const bindDraw = (buf, n, alphaPass) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
@@ -574,11 +605,16 @@ void main(){
       drawList.push({ e, pr });
     }
     drawList.sort((a, b) => b.pr.w - a.pr.w);
+    // 夜はキャラも一緒に暮れる(人物だけ明るく浮くのを防ぐ)
+    if (dark > 0.06) {
+      ctx.filter = `brightness(${(1 - dark * 0.45).toFixed(2)}) saturate(${(1 - dark * 0.2).toFixed(2)})`;
+    }
     for (const { e, pr } of drawList) {
       const s = Math.min(pr.scale * 1.3, 3.2); // ビルボードは少し大きめに(視認性)
       ctx.setTransform(s, 0, 0, s, pr.x, pr.y);
       e.draw(ctx, { x: e.x, y: e.y }); // 自座標をcamに渡す→原点(0,0)に描かれる
     }
+    ctx.filter = 'none';
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     G.fx.drawProjected(ctx, (x, y) => projectXZ(x, groundAt(x, y), y));
 
