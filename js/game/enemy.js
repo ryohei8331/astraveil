@@ -476,6 +476,7 @@ G.Enemy = (() => {
   const bossStart = e => {
     G.world.bossActive = e;
     G.audio.setMood('boss');
+    if (G.cutin && e.def.boss && !e._cutinShown) { e._cutinShown = true; G.cutin.show(e.def); }
   };
 
   const spawnPoisonPool = (x, y, dps) => {

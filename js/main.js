@@ -166,6 +166,7 @@ G.game = {
   const update = dt => {
     const g = G.game;
     G.ui.update(dt);
+    if (G.cutin) G.cutin.update(dt);
     G.fx.update(dt); // freezeタイマー自体もここで進むため常に呼ぶ
 
     // フェード遷移
@@ -200,6 +201,7 @@ G.game = {
     G.time.update(wdt);
     G.world.update(wdt);
     G.fx.ambientUpdate(wdt); // 環境パーティクル(蛍・花びら・泡…)
+    if (G.weather) G.weather.update(wdt);
     if (G.player && !G.player.dead) G.player.update(wdt);
     if (G.input.pressed('menu')) G.menus.open();
 
@@ -251,6 +253,7 @@ G.game = {
           ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
         }
       }
+      if (G.weather) G.weather.draw(ctx, w, h); // 天候(HUDの下)
       G.ui.draw(ctx, w, h);
     } else {
       ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, w, h);
@@ -265,6 +268,9 @@ G.game = {
       case 'dead': G.title.drawDead(ctx, w, h); break;
       case 'worldchange': G.ui.drawWorldChange(ctx, w, h); break;
     }
+
+    // ボス登場カットイン(最前面)
+    if (G.cutin && G.cutin.active) G.cutin.draw(ctx, w, h);
 
     // フェード
     if (g.fade > 0) { ctx.fillStyle = `rgba(4,6,10,${g.fade})`; ctx.fillRect(0, 0, w, h); }

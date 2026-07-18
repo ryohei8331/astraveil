@@ -771,7 +771,8 @@ void main(){
     // ---- 時刻から空・光を決定(朝焼け/白昼/黄昏/星月夜) ----
     const zone = G.world.zone;
     const frac = G.time.frac();
-    const dark = zone.dark ? 0.8 : G.time.darkness();
+    const wDark = G.weather ? G.weather.skyDarken() : 0;
+    const dark = zone.dark ? 0.8 : Math.min(0.85, G.time.darkness() + wDark);
     const und = zone.underwater;
     const dusk = Math.max(0, 1 - Math.abs(frac - 0.81) / 0.06) + Math.max(0, 1 - Math.abs(frac - 0.18) / 0.05);
 
@@ -942,7 +943,8 @@ void main(){
       ctx.filter = `brightness(${(1 - dark * 0.45).toFixed(2)}) saturate(${(1 - dark * 0.2).toFixed(2)})`;
     }
     for (const { e, pr } of drawList) {
-      const s = Math.min(pr.scale * 1.3, 3.2); // ビルボードは少し大きめに(視認性)
+      const bossScale = (e.def && e.def.boss) ? (e.def.unique ? 1.7 : 1.35) : 1; // ボスは威圧的に大きく
+      const s = Math.min(pr.scale * 1.3 * bossScale, 4.4);
       ctx.setTransform(s, 0, 0, s, pr.x, pr.y);
       e.draw(ctx, { x: e.x, y: e.y }); // 自座標をcamに渡す→原点(0,0)に描かれる
     }
