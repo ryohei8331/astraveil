@@ -9,6 +9,11 @@ G.R3D = (() => {
   let zoneKey = null, vbo = null, vertCount = 0;
   let waterVbo = null, waterCount = 0;
   let cam = null;
+  // ポストプロセス(ブルーム)
+  let bloomOk = false, ppW = 0, ppH = 0;
+  let brightProg = null, blurProg = null, compProg = null;
+  let sceneFbo = null, sceneTex = null, sceneDepth = null;
+  let bloomA = null, bloomB = null;
 
   // ---- 最小限の行列演算 ----
   const M4 = {
@@ -180,6 +185,37 @@ void main(){
       skyVbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, skyVbo);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      // ---- ポストプロセス(ブルーム)プログラム ----
+      try {
+        const VPP = `attribute vec2 aP; varying vec2 vUv; void main(){ vUv = aP*0.5+0.5; gl_Position = vec4(aP,0.0,1.0); }`;
+        const FBRIGHT = `precision mediump float; varying vec2 vUv; uniform sampler2D uT; uniform float uThr;
+          void main(){ vec3 c = texture2D(uT, vUv).rgb; float l = dot(c, vec3(0.299,0.587,0.114));
+            float k = max(0.0, l - uThr) / max(l, 0.001); gl_FragColor = vec4(c * k, 1.0); }`;
+        const FBLUR = `precision mediump float; varying vec2 vUv; uniform sampler2D uT; uniform vec2 uDir;
+          void main(){ vec3 s = texture2D(uT, vUv).rgb * 0.227;
+            s += texture2D(uT, vUv + uDir*1.384).rgb * 0.316;
+            s += texture2D(uT, vUv - uDir*1.384).rgb * 0.316;
+            s += texture2D(uT, vUv + uDir*3.230).rgb * 0.070;
+            s += texture2D(uT, vUv - uDir*3.230).rgb * 0.070;
+            gl_FragColor = vec4(s, 1.0); }`;
+        const FCOMP = `precision mediump float; varying vec2 vUv; uniform sampler2D uScene, uBloom; uniform float uAmt;
+          void main(){ vec3 sc = texture2D(uScene, vUv).rgb; vec3 bl = texture2D(uBloom, vUv).rgb;
+            vec3 c = sc + bl * uAmt;
+            // 周辺減光(ビネット)
+            float d = distance(vUv, vec2(0.5)); c *= smoothstep(0.95, 0.45, d) * 0.25 + 0.75;
+            gl_FragColor = vec4(c, 1.0); }`;
+        const mkProg = (fs) => {
+          const p = gl.createProgram();
+          gl.attachShader(p, sh(gl.VERTEX_SHADER, VPP));
+          gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+          gl.linkProgram(p);
+          if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('pp link');
+          return p;
+        };
+        brightProg = mkProg(FBRIGHT); blurProg = mkProg(FBLUR); compProg = mkProg(FCOMP);
+        bloomOk = true;
+      } catch (e) { bloomOk = false; console.warn('bloom disabled', e); }
+
       // テクスチャアトラス(プロシージャル生成)をGPUへ
       if (G.Tex && G.Tex.build && G.Tex.build() && G.Tex.canvas) {
         atlasTex = gl.createTexture();
@@ -540,6 +576,79 @@ void main(){
     return `${z.zoneId}|${z.zone.gateFlag ? !!G.quests.flags[z.zone.gateFlag] : 0}|${G.time.isFullMoon() && G.time.isNight() ? 1 : 0}|b${Math.floor(G.time.frac() * 8)}`;
   };
 
+  // ---- ポストプロセス用FBO ----
+  const mkTex = (w, h) => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  };
+  const mkFbo = tex => {
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return f;
+  };
+  const ensurePost = (w, h) => {
+    if (!bloomOk || (ppW === w && ppH === h)) return;
+    ppW = w; ppH = h;
+    if (sceneTex) { gl.deleteTexture(sceneTex); gl.deleteFramebuffer(sceneFbo); gl.deleteRenderbuffer(sceneDepth); }
+    if (bloomA) { gl.deleteTexture(bloomA.t); gl.deleteFramebuffer(bloomA.f); }
+    if (bloomB) { gl.deleteTexture(bloomB.t); gl.deleteFramebuffer(bloomB.f); }
+    sceneTex = mkTex(w, h); sceneFbo = mkFbo(sceneTex);
+    sceneDepth = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, sceneDepth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, sceneDepth);
+    const bw = Math.max(1, w >> 2), bh = Math.max(1, h >> 2);
+    bloomA = { t: mkTex(bw, bh), w: bw, h: bh }; bloomA.f = mkFbo(bloomA.t);
+    bloomB = { t: mkTex(bw, bh), w: bw, h: bh }; bloomB.f = mkFbo(bloomB.t);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  };
+  const fsQuad = pr => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyVbo);
+    const aP = gl.getAttribLocation(pr, 'aP');
+    gl.enableVertexAttribArray(aP);
+    gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 8, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+  const runBloom = (w, h) => {
+    gl.disable(gl.DEPTH_TEST);
+    const bw = bloomA.w, bh = bloomA.h;
+    // ブライトパス(scene→bloomA)
+    gl.useProgram(brightProg);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.f); gl.viewport(0, 0, bw, bh);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.uniform1i(gl.getUniformLocation(brightProg, 'uT'), 0);
+    gl.uniform1f(gl.getUniformLocation(brightProg, 'uThr'), 0.72);
+    fsQuad(brightProg);
+    // ブラー水平(bloomA→bloomB)→垂直(bloomB→bloomA)を2往復
+    gl.useProgram(blurProg);
+    const uT = gl.getUniformLocation(blurProg, 'uT'), uDir = gl.getUniformLocation(blurProg, 'uDir');
+    gl.uniform1i(uT, 0);
+    for (let k = 0; k < 2; k++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.f); gl.viewport(0, 0, bw, bh);
+      gl.bindTexture(gl.TEXTURE_2D, bloomA.t); gl.uniform2f(uDir, 1.0 / bw, 0); fsQuad(blurProg);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.f); gl.viewport(0, 0, bw, bh);
+      gl.bindTexture(gl.TEXTURE_2D, bloomB.t); gl.uniform2f(uDir, 0, 1.0 / bh); fsQuad(blurProg);
+    }
+    // 合成(scene+bloom→画面)
+    gl.useProgram(compProg);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.uniform1i(gl.getUniformLocation(compProg, 'uScene'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bloomA.t);
+    gl.uniform1i(gl.getUniformLocation(compProg, 'uBloom'), 1);
+    gl.uniform1f(gl.getUniformLocation(compProg, 'uAmt'), 1.15);
+    fsQuad(compProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.DEPTH_TEST);
+  };
+
   // ---- カメラ・投影 ----
   const PITCH = 0.86, DIST = 330, FOVY = 1.0; // 近め・低めで迫力と操作の見通しを両立
   const updateCamera = (w, h) => {
@@ -596,6 +705,9 @@ void main(){
     const key = zoneKeyNow();
     if (key !== zoneKey) { zoneKey = key; buildZone(); }
     updateCamera(w, h);
+    const GW = glCanvas.width, GH = glCanvas.height;
+    const useBloom = bloomOk && !(G.settings && G.settings.bloom === false);
+    if (useBloom) { ensurePost(GW, GH); gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); }
 
     // ---- 時刻から空・光を決定(朝焼け/白昼/黄昏/星月夜) ----
     const zone = G.world.zone;
@@ -717,6 +829,8 @@ void main(){
     };
     if (vertCount) bindDraw(vbo, vertCount, false);
     if (waterCount) bindDraw(waterVbo, waterCount, true);
+    // ブルーム: sceneFBO→ブライト→ブラー→画面へ合成
+    if (useBloom) runBloom(GW, GH);
 
     // ---- オーバーレイ: エンティティを奥行きソートして既存2D描画を重ねる ----
     const ents = G.world.entities.filter(e => !e.dead && e.draw);

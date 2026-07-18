@@ -4,9 +4,9 @@ G.VERSION = '3.0.0';
 
 // 恒久設定(セーブとは別枠)
 G.settings = (() => {
-  let s = { render3d: true, showGuide: true };
+  let s = { render3d: true, showGuide: true, bloom: true };
   try { Object.assign(s, JSON.parse(localStorage.getItem('astraveil_settings') || '{}')); } catch (e) { }
-  s.save = () => { try { localStorage.setItem('astraveil_settings', JSON.stringify({ render3d: s.render3d, showGuide: s.showGuide })); } catch (e) { } };
+  s.save = () => { try { localStorage.setItem('astraveil_settings', JSON.stringify({ render3d: s.render3d, showGuide: s.showGuide, bloom: s.bloom })); } catch (e) { } };
   return s;
 })();
 
