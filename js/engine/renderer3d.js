@@ -5,7 +5,7 @@
 G.R3D = (() => {
   const T = G.TILE;
   let gl = null, glCanvas = null, prog = null, ok = false;
-  let skyProg = null, skyVbo = null;
+  let skyProg = null, skyVbo = null, atlasTex = null;
   let zoneKey = null, vbo = null, vertCount = 0;
   let waterVbo = null, waterCount = 0;
   let cam = null;
@@ -39,12 +39,12 @@ G.R3D = (() => {
   };
 
   const VSH = `
-attribute vec3 aPos; attribute vec4 aCol;
+attribute vec3 aPos; attribute vec4 aCol; attribute vec2 aUV;
 uniform mat4 uVP; uniform vec3 uTint; uniform float uTime;
-varying vec4 vCol; varying float vDepth; varying vec3 vW;
+varying vec4 vCol; varying float vDepth; varying vec3 vW; varying vec2 vUV;
 void main(){
   vec3 p = aPos;
-  vW = aPos;
+  vW = aPos; vUV = aUV;
   float glint = 0.0;
   if (aCol.a < 0.9) { // 水面: 波でうねり、頂点ごとに煌めく
     float w = sin(uTime*2.1 + p.x*0.085 + p.z*0.06) + sin(uTime*3.3 + p.z*0.11);
@@ -96,8 +96,9 @@ void main(){
 }`;
   const FSH = `
 precision mediump float;
-varying vec4 vCol; varying float vDepth; varying vec3 vW;
+varying vec4 vCol; varying float vDepth; varying vec3 vW; varying vec2 vUV;
 uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime; uniform float uCldSh;
+uniform sampler2D uTex; uniform float uTexOn;
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float vn(vec2 p){
   vec2 i = floor(p), f = fract(p);
@@ -105,10 +106,17 @@ float vn(vec2 p){
   return mix(mix(h2(i), h2(i+vec2(1.,0.)), f.x), mix(h2(i+vec2(0.,1.)), h2(i+vec2(1.,1.)), f.x), f.y);
 }
 void main(){
-  // ピクセル単位の質感(3オクターブのノイズで土・草・石の肌合いを出す)
-  vec2 q = vW.xz + vW.y * 0.6;
-  float g = vn(q * 0.16) * 0.45 + vn(q * 0.75) * 0.35 + vn(q * 3.1) * 0.20;
-  vec3 c = vCol.rgb * (0.92 + g * 0.16);
+  vec3 c = vCol.rgb;
+  if (uTexOn > 0.5 && vUV.x >= 0.0) {
+    // マテリアルの質感(グレースケール明度)を色に乗算。0.84中心で±変調
+    float det = texture2D(uTex, vUV).r;
+    c *= (0.42 + det * 0.66);
+  } else {
+    // テクスチャ無しサーフェス(影・泡等)は軽いノイズだけ
+    vec2 q = vW.xz + vW.y * 0.6;
+    float g = vn(q * 0.16) * 0.45 + vn(q * 0.75) * 0.35 + vn(q * 3.1) * 0.20;
+    c *= (0.92 + g * 0.16);
+  }
   if (vCol.a < 0.9) { // 水面のきらめき
     float sp = vn(vW.xz * 0.9 + vec2(uTime * 0.35, uTime * 0.22));
     c += vec3(0.10, 0.12, 0.13) * smoothstep(0.72, 0.95, sp);
@@ -152,6 +160,17 @@ void main(){
       skyVbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, skyVbo);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      // テクスチャアトラス(プロシージャル生成)をGPUへ
+      if (G.Tex && G.Tex.build && G.Tex.build() && G.Tex.canvas) {
+        atlasTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, G.Tex.canvas);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      }
       gl.enable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -251,13 +270,22 @@ void main(){
       };
     }
     const pal = PALBASE[G.world.zone.biome] || PALBASE.grass;
-    const pos = [], col = [], wpos = [], wcol = [];
+    const pos = [], col = [], uvM = [], wpos = [], wcol = [], uvW = [];
+    // 現在マテリアルのUV矩形。setMat()で切替。[-1,...]はテクスチャ無し(影・泡)
+    let curUV = [-1, -1, -1, -1];
+    const NOUV = [-1, -1, -1, -1];
+    const setMat = name => { curUV = (G.Tex && G.Tex.ok && name) ? G.Tex.uv(name) : NOUV; };
+    const idxOrder = [0, 1, 2, 0, 2, 3];
     const push = (arrP, arrC, verts, c, shade, alpha) => {
-      const idx = [0, 1, 2, 0, 2, 3];
       const sh = Array.isArray(shade) ? shade : [shade, shade, shade, shade];
-      for (const i of idx) {
+      const arrU = arrP === pos ? uvM : uvW;
+      const u = curUV;
+      // 4隅UV: v0(u0,v0) v1(u1,v0) v2(u1,v1) v3(u0,v1)
+      const cU = u[0] < 0 ? null : [[u[0], u[1]], [u[2], u[1]], [u[2], u[3]], [u[0], u[3]]];
+      for (const i of idxOrder) {
         arrP.push(verts[i][0], verts[i][1], verts[i][2]);
         arrC.push(c[0] * sh[i], c[1] * sh[i], c[2] * sh[i], alpha !== undefined ? alpha : 1);
+        if (cU) arrU.push(cU[i][0], cU[i][1]); else arrU.push(-1, -1);
       }
     };
     // AO: 高い隣接タイルが落とす淡い影(コーナー単位)
@@ -296,6 +324,10 @@ void main(){
     const gateOpen = c =>
       (c === 'D' && G.world.zone.gateFlag && G.quests.flags[G.world.zone.gateFlag]) ||
       (c === 'M' && G.time.isFullMoon() && G.time.isNight());
+    const FLOORMAT = {
+      '.': 'grassA', ',': 'grassB', '=': 'dirt', 's': 'sand', 'h': 'bush',
+      'F': 'moonfield', 'r': 'ruinfloor', 'g': 'techfloor', 'b': 'plank', 'f': 'plank',
+    };
 
     for (let ty = 0; ty < S.th; ty++) {
       for (let tx = 0; tx < S.tw; tx++) {
@@ -303,8 +335,10 @@ void main(){
         const x0 = tx * T, x1 = x0 + T, z0 = ty * T, z1 = z0 + T;
         const base = colorOf(c, pal, tx, ty);
         if (c === '~') {
+          setMat('water');
           push(wpos, wcol, [[x0, -5, z0], [x1, -5, z0], [x1, -5, z1], [x0, -5, z1]], base, 1, 0.82);
           push(pos, col, [[x0, -14, z0], [x1, -14, z0], [x1, -14, z1], [x0, -14, z1]], base, 0.45);
+          setMat(null);
           // 水際の泡(岸に接する辺に白い縁)
           {
             const foam = [0.88, 0.94, 0.99];
@@ -322,12 +356,16 @@ void main(){
           continue;
         }
         if (c === 'o') { // 気泡孔: 床+発光ベント
+          setMat('ruinfloor');
           push(pos, col, [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], base, 0.9);
+          setMat(null);
           boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, 0, 5, [0.7, 0.88, 1], 1);
           continue;
         }
         if (c === 'l') {
+          setMat('lava');
           push(pos, col, [[x0, -3, z0], [x1, -3, z0], [x1, -3, z1], [x0, -3, z1]], base, 1.15);
+          setMat(null);
           continue;
         }
         if (c === '_') {
@@ -354,7 +392,9 @@ void main(){
           const dhdz = ((c01 + c11) - (c00 + c10)) / (2 * T);
           const slope = G.U.clamp(1 - (dhdx + dhdz) * 0.95, 0.80, 1.18); // 柔らかめの陰影(市松感を抑える)
           const hs = [c00, c10, c11, c01].map((hh, i2) => ao[i2] * slope * (1 + hh * 0.014));
+          setMat(FLOORMAT[c] || 'grassA');
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], base, hs);
+          setMat(null);
           const h2 = G.U.hash2(tx, ty);
           // 草の穂(地面に立体のディテールを散らす)
           if ((c === '.' || c === ',') && h2 > 0.52) {
@@ -390,9 +430,12 @@ void main(){
           const cs = 1 + (j - 0.5) * 0.36;
           const canopy = base.map(v => Math.min(1, v * (0.85 + j * 0.4)));
           const hTop = 34 + j * 10;
+          setMat('grassB');
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), floorAO(tx, ty));
+          setMat('plank');
           boxAtY(pos, col, x0 + T / 2 - 4, z0 + T / 2 - 4, 8, hAvg, hAvg + 16, [0.35, 0.27, 0.19], 1);
           // ふっくらした多葉の樹冠(中心+四方のローブ)
+          setMat('grassB');
           {
             const lobe = (ox, oz, s2, y0, y1, f2) =>
               boxAtY(pos, col, x0 + T / 2 - s2 / 2 + ox, z0 + T / 2 - s2 / 2 + oz, s2,
@@ -404,53 +447,65 @@ void main(){
             lobe(1, 9 * cs, 15 * cs, 14, hTop - 5, 1.16);
             lobe(3 * cs, -2, (T - 20) * cs, hTop - 4, hTop + 5, 1.24); // てっぺんの新芽
           }
+          setMat(null);
           castShadow(0.14, 3);
         } else if (c === 'w') {
           // 建物: 壁+張り出した軒+切妻風の屋根(ドラクエ的な家並みへ)
           const roofC = zn.biome === 'ruins' ? [0.30, 0.34, 0.42] : [0.66, 0.30, 0.22];
           const wallC = [base[0] * 1.02, base[1] * 1.02, base[2] * 1.02];
+          setMat(zn.biome === 'ruins' ? 'rock' : 'plaster');
           boxAtY(pos, col, x0, z0, T, hMin - 1, hMin + 22, wallC, 1);
+          setMat(null);
           // 扉(南側が歩ける場合)
           const southC = ty + 1 < S.th ? S.grid[ty + 1][tx] : ' ';
           if (!(HEIGHT[southC] > 0) && southC !== ' ') {
-            push(pos, col, [[x0 + 11, hMin - 1, z1 + 0.15], [x0 + 21, hMin - 1, z1 + 0.15], [x0 + 21, hMin + 13, z1 + 0.15], [x0 + 11, hMin + 13, z1 + 0.15]], [0.16, 0.11, 0.08], 1);
-            push(pos, col, [[x0 + 18.5, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 7, z1 + 0.3], [x0 + 18.5, hMin + 7, z1 + 0.3]], [0.8, 0.7, 0.4], 1);
+            setMat('plank');
+            push(pos, col, [[x0 + 11, hMin - 1, z1 + 0.15], [x0 + 21, hMin - 1, z1 + 0.15], [x0 + 21, hMin + 13, z1 + 0.15], [x0 + 11, hMin + 13, z1 + 0.15]], [0.32, 0.20, 0.13], 1);
+            setMat(null);
+            push(pos, col, [[x0 + 18.5, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 5, z1 + 0.3], [x0 + 20, hMin + 7, z1 + 0.3], [x0 + 18.5, hMin + 7, z1 + 0.3]], [0.9, 0.78, 0.42], 1);
           }
-          // 軒
+          // 軒+屋根(瓦テクスチャ)
+          setMat('shingle');
           boxAtY(pos, col, x0 - 3, z0 - 3, T + 6, hMin + 21, hMin + 24, roofC.map(v => v * 0.85), 1);
-          // 屋根(中央の棟へ絞る)
           const ap = 14;
           push(pos, col, [[x0 - 3, hMin + 24, z1 + 3], [x1 + 3, hMin + 24, z1 + 3], [x1 - 4, hMin + 24 + ap, z0 + T / 2], [x0 + 4, hMin + 24 + ap, z0 + T / 2]], roofC, 1);
           push(pos, col, [[x1 + 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z0 - 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.72);
+          setMat(null);
           push(pos, col, [[x0 - 3, hMin + 24, z0 - 3], [x0 - 3, hMin + 24, z1 + 3], [x0 + 4, hMin + 24 + ap, z0 + T / 2], [x0 + 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
           push(pos, col, [[x1 + 3, hMin + 24, z1 + 3], [x1 + 3, hMin + 24, z0 - 3], [x1 - 4, hMin + 24 + ap, z0 + T / 2], [x1 - 4, hMin + 24 + ap, z0 + T / 2]], roofC, 0.6);
           castShadow(0.22);
         } else if (c === 'D' || c === 'M') {
           push(pos, col, [[x0, c00, z0], [x1, c10, z0], [x1, c11, z1], [x0, c01, z1]], hexRGB(pal[1]), 1);
+          setMat('rock');
           boxAtY(pos, col, x0, z0 + 10, 7, hMin - 1, hMin + hgt, base, 1);
           boxAtY(pos, col, x1 - 7, z0 + 10, 7, hMin - 1, hMin + hgt, base, 1);
           boxAtY(pos, col, x0, z0 + 10, T, hMin + hgt - 8, hMin + hgt, c === 'M' ? [0.82, 0.85, 1] : base, 1);
+          setMat(null);
         } else {
+          setMat(c === 'c' ? 'crystal' : (c === '*' || c === '^' ? 'rock' : 'rock'));
           boxAtY(pos, col, x0, z0, T, hMin - 1, hMin + hgt, base, 1);
+          setMat(null);
           castShadow(0.17);
         }
       }
     }
 
-    const up = (buf, p, cl) => {
-      const data = new Float32Array(p.length / 3 * 7);
-      for (let i = 0, v = 0; i < p.length / 3; i++, v += 7) {
+    const up = (buf, p, cl, uvA) => {
+      const n = p.length / 3;
+      const data = new Float32Array(n * 9);
+      for (let i = 0, v = 0; i < n; i++, v += 9) {
         data[v] = p[i * 3]; data[v + 1] = p[i * 3 + 1]; data[v + 2] = p[i * 3 + 2];
         data[v + 3] = cl[i * 4]; data[v + 4] = cl[i * 4 + 1]; data[v + 5] = cl[i * 4 + 2]; data[v + 6] = cl[i * 4 + 3];
+        data[v + 7] = uvA[i * 2]; data[v + 8] = uvA[i * 2 + 1];
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-      return p.length / 3;
+      return n;
     };
     if (!vbo) vbo = gl.createBuffer();
     if (!waterVbo) waterVbo = gl.createBuffer();
-    vertCount = up(vbo, pos, col);
-    waterCount = up(waterVbo, wpos, wcol);
+    vertCount = up(vbo, pos, col, uvM);
+    waterCount = up(waterVbo, wpos, wcol, uvW);
   };
 
   const zoneKeyNow = () => {
@@ -581,13 +636,22 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(prog, 'uFogDen'), zone.dark ? 3.2 : (und ? 2.6 : 1.0));
     gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), G.world.animT);
     gl.uniform1f(gl.getUniformLocation(prog, 'uCldSh'), (und || zone.dark || dark > 0.5) ? 0 : 1);
+    // マテリアルアトラス
+    gl.uniform1f(gl.getUniformLocation(prog, 'uTexOn'), atlasTex ? 1 : 0);
+    if (atlasTex) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+      gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
+    }
 
+    const STRIDE = 36;
     const bindDraw = (buf, n, alphaPass) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      const aPos = gl.getAttribLocation(prog, 'aPos'), aCol = gl.getAttribLocation(prog, 'aCol');
-      gl.enableVertexAttribArray(aPos); gl.enableVertexAttribArray(aCol);
-      gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 28, 0);
-      gl.vertexAttribPointer(aCol, 4, gl.FLOAT, false, 28, 12);
+      const aPos = gl.getAttribLocation(prog, 'aPos'), aCol = gl.getAttribLocation(prog, 'aCol'), aUV = gl.getAttribLocation(prog, 'aUV');
+      gl.enableVertexAttribArray(aPos); gl.enableVertexAttribArray(aCol); gl.enableVertexAttribArray(aUV);
+      gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, STRIDE, 0);
+      gl.vertexAttribPointer(aCol, 4, gl.FLOAT, false, STRIDE, 12);
+      gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, STRIDE, 28);
       if (alphaPass) gl.depthMask(false);
       gl.drawArrays(gl.TRIANGLES, 0, n);
       if (alphaPass) gl.depthMask(true);
