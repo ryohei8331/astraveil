@@ -117,31 +117,58 @@ G.Sprite = (() => {
       ctx.closePath(); fillOut(ctx, 1.2);
     }
 
-    // 脚(歩行サイクル)
-    const legC = shade(body, -0.35);
+    const back = fy2 < -0.45; // 後ろ姿
+    const pants = shade(body, -0.42);
+    const bootC = '#4a3428';
+    // 脚+ブーツ(歩行サイクル)
     for (const s of [-1, 1]) {
       const lift = s * walk * 3.2;
-      ctx.fillStyle = legC;
-      rr(ctx, X + s * 3 - 2.2, gy - 9 + Math.min(0, -lift * 0.4), 4.4, 9 + lift * 0.4, 2);
-      fillOut(ctx, 1.2);
+      const ly = gy - 9 + Math.min(0, -lift * 0.4), lh = 7 + lift * 0.4;
+      ctx.fillStyle = pants;
+      rr(ctx, X + s * 3 - 2.2, ly, 4.4, lh, 2); fillOut(ctx, 1.1);
+      // ブーツ
+      ctx.fillStyle = bootC;
+      rr(ctx, X + s * 3 - 2.6, ly + lh - 1, 5, 3.4, 1.6); fillOut(ctx, 1.1);
+      ctx.fillStyle = shade(bootC, 0.18);
+      ctx.fillRect(X + s * 3 - 2.4, ly + lh - 0.6, 4.6, 1);
     }
-    // 胴体(縦グラデ+ベルト)
+    // 胴体(チュニック: 縦グラデ+裾のタバード)
     const grad = ctx.createLinearGradient(X, gy - 22, X, gy - 6);
-    grad.addColorStop(0, shade(body, 0.18));
-    grad.addColorStop(1, shade(body, -0.22));
+    grad.addColorStop(0, shade(body, 0.20));
+    grad.addColorStop(0.55, body);
+    grad.addColorStop(1, shade(body, -0.24));
     ctx.fillStyle = grad;
-    rr(ctx, X - 6.5, gy - 22, 13, 14, 4.5);
-    fillOut(ctx, 1.5);
-    ctx.fillStyle = shade(body, -0.5);
-    ctx.fillRect(X - 6.5, gy - 11, 13, 2.2);
+    rr(ctx, X - 6.5, gy - 22, 13, 15, 4.5);
+    fillOut(ctx, 1.4);
+    // タバード(前垂れ)
+    ctx.fillStyle = shade(body, 0.06);
+    ctx.beginPath();
+    ctx.moveTo(X - 3.5, gy - 14); ctx.lineTo(X + 3.5, gy - 14);
+    ctx.lineTo(X + 3, gy - 5); ctx.lineTo(X, gy - 3); ctx.lineTo(X - 3, gy - 5);
+    ctx.closePath(); fillOut(ctx, 1);
+    // 襟元のV
+    if (!back) {
+      ctx.strokeStyle = shade(body, -0.4); ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(X - 3.5, gy - 21.5); ctx.lineTo(X, gy - 17); ctx.lineTo(X + 3.5, gy - 21.5); ctx.stroke();
+      ctx.fillStyle = shade(skin, -0.02); // 胸元
+      ctx.beginPath(); ctx.moveTo(X - 2.6, gy - 21); ctx.lineTo(X, gy - 17.6); ctx.lineTo(X + 2.6, gy - 21); ctx.closePath(); ctx.fill();
+    }
+    // ベルト+金具
+    ctx.fillStyle = '#5a4028';
+    ctx.fillRect(X - 6.5, gy - 12, 13, 3);
+    ctx.fillStyle = '#e8c860';
+    rr(ctx, X - 2, gy - 12.2, 4, 3.4, 1); ctx.fill();
+    ctx.fillStyle = '#8a6a20'; ctx.fillRect(X - 0.6, gy - 11.4, 1.2, 1.8);
     if (look.pauldron) {
-      ctx.fillStyle = shade(look.tint || body, 0.25);
-      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(X + s * 6.5, gy - 20, 3.4, 0, 7); fillOut(ctx, 1.2); }
+      ctx.fillStyle = shade(look.tint || body, 0.28);
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(X + s * 6.8, gy - 20, 3.8, 0, 7); fillOut(ctx, 1.1); }
+      ctx.fillStyle = shade(look.tint || body, 0.5);
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(X + s * 6.8 - 1, gy - 21, 1.2, 0, 7); ctx.fill(); }
     }
     if (look.glow) {
       const ga = ctx.globalAlpha;
-      ctx.strokeStyle = look.glow; ctx.globalAlpha = ga * 0.55;
-      ctx.lineWidth = 1; rr(ctx, X - 6.5, gy - 22, 13, 14, 4.5); ctx.stroke();
+      ctx.strokeStyle = look.glow; ctx.globalAlpha = ga * 0.6;
+      ctx.lineWidth = 1; rr(ctx, X - 6.5, gy - 22, 13, 15, 4.5); ctx.stroke();
       ctx.globalAlpha = ga;
     }
 
@@ -182,38 +209,61 @@ G.Sprite = (() => {
     ctx.beginPath(); ctx.arc(hx, hy, 2.3, 0, 7); fillOut(ctx, 1);
     ctx.beginPath(); ctx.arc(X - 6 - Math.sin(armSwing) * 4, gy - 12.5, 2, 0, 7); fillOut(ctx, 1);
 
-    // 頭
-    const hg = ctx.createRadialGradient(X - 2, gy - 29, 2, X, gy - 27.5, 8.5);
-    hg.addColorStop(0, shade(skin, 0.14));
-    hg.addColorStop(1, shade(skin, -0.06));
+    // 首
+    ctx.fillStyle = shade(skin, -0.14);
+    ctx.fillRect(X - 2.2, gy - 23, 4.4, 3);
+    // 頭(球状グラデ)
+    const hg = ctx.createRadialGradient(X - 2.5, gy - 30, 1.5, X, gy - 27.5, 9);
+    hg.addColorStop(0, shade(skin, 0.16));
+    hg.addColorStop(1, shade(skin, -0.08));
     ctx.fillStyle = hg;
-    ctx.beginPath(); ctx.arc(X, gy - 27.5, 7.6, 0, 7); fillOut(ctx, 1.5);
-    // 髪(4スタイル)
-    ctx.fillStyle = hairC;
-    const hs = o.hairStyle || 0;
-    ctx.beginPath();
-    if (hs === 1) { // ロング
-      ctx.arc(X, gy - 29, 7.4, Math.PI * 0.85, Math.PI * 2.15);
-      ctx.lineTo(X + 7, gy - 18); ctx.lineTo(X + 4.5, gy - 20); ctx.lineTo(X - 4.5, gy - 20); ctx.lineTo(X - 7, gy - 18);
-      ctx.closePath();
-    } else if (hs === 2) { // ツンツン
-      ctx.arc(X, gy - 29, 7.2, Math.PI * 0.9, Math.PI * 2.1);
-      for (let i = -2; i <= 2; i++) ctx.lineTo(X + i * 3 + 1.2, gy - 36 - (i % 2 ? 2.4 : 0.6));
-      ctx.closePath();
-    } else if (hs === 3) { // おだんご
-      ctx.arc(X, gy - 29, 7.2, Math.PI * 0.9, Math.PI * 2.1); ctx.closePath();
-      fillOut(ctx, 1.2);
-      ctx.beginPath(); ctx.arc(X + 5, gy - 34.5, 3.2, 0, 7);
-    } else { // ショート
-      ctx.arc(X, gy - 29.2, 7.3, Math.PI * 0.86, Math.PI * 2.14); ctx.closePath();
+    ctx.beginPath(); ctx.arc(X, gy - 27.5, 7.6, 0, 7); fillOut(ctx, 1.4);
+    // 耳(横〜前向きのみ)
+    if (!back) {
+      ctx.fillStyle = shade(skin, -0.02);
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(X + s * 7.4, gy - 27, 1.5, 2.2, 0, 0, 7); fillOut(ctx, 1); }
     }
-    fillOut(ctx, 1.2);
-    ctx.fillStyle = shade(hairC, 0.25);
-    ctx.beginPath(); ctx.arc(X - 2.6, gy - 32, 2.6, 0, 7); ctx.fill();
+    // 髪(4スタイル)—— 後ろ姿は後頭部を覆う
+    const hs = o.hairStyle || 0;
+    const hairGrad = ctx.createLinearGradient(X, gy - 36, X, gy - 22);
+    hairGrad.addColorStop(0, shade(hairC, 0.22));
+    hairGrad.addColorStop(1, shade(hairC, -0.14));
+    ctx.fillStyle = hairGrad;
+    if (back) {
+      // 後頭部を大きく覆う
+      ctx.beginPath(); ctx.arc(X, gy - 28, 8, 0, Math.PI * 2); fillOut(ctx, 1.2);
+      if (hs === 1) { ctx.fillStyle = hairGrad; rr(ctx, X - 6, gy - 26, 12, 12, 4); fillOut(ctx, 1.2); }
+      if (hs === 3) { ctx.fillStyle = hairGrad; ctx.beginPath(); ctx.arc(X, gy - 35, 3.6, 0, 7); fillOut(ctx, 1.1); }
+    } else {
+      ctx.beginPath();
+      if (hs === 1) { // ロング
+        ctx.arc(X, gy - 29, 7.7, Math.PI * 0.82, Math.PI * 2.18);
+        ctx.lineTo(X + 7.4, gy - 17); ctx.lineTo(X + 4.5, gy - 20); ctx.lineTo(X - 4.5, gy - 20); ctx.lineTo(X - 7.4, gy - 17);
+        ctx.closePath();
+      } else if (hs === 2) { // ツンツン
+        ctx.arc(X, gy - 29, 7.4, Math.PI * 0.88, Math.PI * 2.12);
+        for (let i = -2; i <= 2; i++) ctx.lineTo(X + i * 3 + 1.2, gy - 36.5 - (i % 2 ? 2.6 : 0.5));
+        ctx.closePath();
+      } else if (hs === 3) { // おだんご
+        ctx.arc(X, gy - 29, 7.4, Math.PI * 0.88, Math.PI * 2.12); ctx.closePath();
+        fillOut(ctx, 1.2);
+        ctx.fillStyle = hairGrad; ctx.beginPath(); ctx.arc(X + 5, gy - 34.8, 3.4, 0, 7);
+      } else { // ショート(前髪の房)
+        ctx.arc(X, gy - 29.4, 7.5, Math.PI * 0.84, Math.PI * 2.16);
+        ctx.lineTo(X + 5, gy - 24); ctx.lineTo(X + 2.5, gy - 26.5); ctx.lineTo(X, gy - 24.5); ctx.lineTo(X - 2.5, gy - 26.5); ctx.lineTo(X - 5, gy - 24);
+        ctx.closePath();
+      }
+      fillOut(ctx, 1.2);
+    }
+    // 髪のハイライト帯
+    ctx.strokeStyle = shade(hairC, 0.42); ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(X - 1, gy - 30, 5.2, Math.PI * 1.05, Math.PI * 1.65); ctx.stroke();
 
-    // 顔(向き+まばたき+ほお)
+    // 顔(向き+まばたき+ほお)—— 後ろ姿は描かない
     const blink = (t % 3.7) > 3.58;
     const ex = fx2 * 2.6, ey = fy2 * 1.4;
+    if (back) { /* 後ろ姿: 顔なし */ }
+    else {
     if (o.hurt) {
       ctx.strokeStyle = '#5c2430'; ctx.lineWidth = 1.4;
       for (const s of [-1, 1]) {
@@ -251,6 +301,7 @@ G.Sprite = (() => {
       ctx.fillStyle = 'rgba(240,140,140,.28)';
       for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(X + ex * 0.6 + s * 5, gy - 26 + ey * 0.5, 1.7, 1.1, 0, 0, 7); ctx.fill(); }
     }
+    } // end 顔(!back)
 
     // 詠唱チャージの粒子
     if (o.chargeCol) {
