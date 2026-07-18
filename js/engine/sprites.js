@@ -303,6 +303,33 @@ G.Sprite = (() => {
     }
     } // end 顔(!back)
 
+    // ---- ライティング演出 ----
+    // 乗算/加算合成は「スプライトだけが透明レイヤに乗る3Dモード」でのみ安全
+    const litMode = G.R3D && G.R3D.active && G.R3D.active();
+    if (litMode) {
+      ctx.save();
+      // コアシャドウ: 体の右下を落とす(乗算=シルエット内のみ暗くなる)
+      ctx.globalCompositeOperation = 'multiply';
+      const csg = ctx.createLinearGradient(X - 7, gy - 34, X + 9, gy - 2);
+      csg.addColorStop(0, 'rgba(255,255,255,1)');
+      csg.addColorStop(0.5, 'rgba(224,228,238,1)');
+      csg.addColorStop(1, 'rgba(150,158,182,1)');
+      ctx.fillStyle = csg;
+      ctx.beginPath(); ctx.arc(X, gy - 27.5, 8.6, 0, 7); ctx.fill();
+      rr(ctx, X - 7.4, gy - 22.5, 14.8, 17, 5); ctx.fill();
+      // 脚
+      rr(ctx, X - 6, gy - 9, 12, 12, 3); ctx.fill();
+      ctx.restore();
+    }
+    // リムライト(頭・肩の上左)—— 加算だが淡いので両モードで可
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(255,246,214,.45)'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(X, gy - 27.5, 7.8, Math.PI * 1.02, Math.PI * 1.6); ctx.stroke();
+    ctx.strokeStyle = 'rgba(196,222,255,.35)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(X - 2, gy - 21, 7.2, Math.PI * 1.08, Math.PI * 1.5); ctx.stroke();
+    ctx.restore();
+
     // 詠唱チャージの粒子
     if (o.chargeCol) {
       ctx.save();
