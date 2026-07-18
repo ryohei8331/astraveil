@@ -14,6 +14,10 @@ G.R3D = (() => {
   let brightProg = null, blurProg = null, compProg = null;
   let sceneFbo = null, sceneTex = null, sceneDepth = null;
   let bloomA = null, bloomB = null;
+  // シャドウマッピング
+  let shadowOk = false, depthProg = null, shadowFbo = null, shadowTex = null, shadowRb = null;
+  const SHADOW_SIZE = 1024;
+  let lightVP = null;
 
   // ---- 最小限の行列演算 ----
   const M4 = {
@@ -27,6 +31,13 @@ G.R3D = (() => {
     persp(fovY, aspect, near, far) {
       const f = 1 / Math.tan(fovY / 2), nf = 1 / (near - far);
       return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+    },
+    ortho(l, r, b, t, near, far) {
+      const lr = 1 / (l - r), bt = 1 / (b - t), nf = 1 / (near - far);
+      return new Float32Array([
+        -2 * lr, 0, 0, 0, 0, -2 * bt, 0, 0, 0, 0, 2 * nf, 0,
+        (l + r) * lr, (t + b) * bt, (far + near) * nf, 1,
+      ]);
     },
     lookAt(eye, ctr, up) {
       const zx = eye[0] - ctr[0], zy = eye[1] - ctr[1], zz = eye[2] - ctr[2];
@@ -105,6 +116,8 @@ varying vec4 vCol; varying float vDepth; varying vec3 vW; varying vec2 vUV; vary
 uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime; uniform float uCldSh;
 uniform sampler2D uTex; uniform float uTexOn;
 uniform vec3 uSunDir, uSunCol, uSkyC, uGndC, uEye;
+uniform mat4 uLVP; uniform sampler2D uShadow; uniform float uShadowOn;
+float unpackD(vec4 c){ return dot(c, vec4(1.0, 1.0/255.0, 1.0/65025.0, 1.0/16581375.0)); }
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float vn(vec2 p){
   vec2 i = floor(p), f = fract(p);
@@ -128,6 +141,22 @@ void main(){
   // やわらかい影の縁 + 太陽光
   float sh = smoothstep(0.0, 0.35, ndl);
   vec3 sun = uSunCol * (ndl * 0.75 + sh * 0.25);
+  // シャドウマップ(建物・樹が地面へ落とす影)
+  if (uShadowOn > 0.5 && ndl > 0.0) {
+    vec4 lp = uLVP * vec4(vW, 1.0);
+    vec3 pc = lp.xyz / lp.w * 0.5 + 0.5;
+    if (pc.x > 0.005 && pc.x < 0.995 && pc.y > 0.005 && pc.y < 0.995 && pc.z < 1.0) {
+      float bias = max(0.0016, 0.006 * (1.0 - ndl));
+      float cur = pc.z - bias;
+      float lit = 0.0; float tx = 1.0 / 1024.0;
+      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+        float d = unpackD(texture2D(uShadow, pc.xy + vec2(float(i), float(j)) * tx));
+        lit += cur <= d ? 1.0 : 0.0;
+      }
+      float shd = lit / 9.0;
+      sun *= 0.12 + 0.88 * shd; // 影は濃く(直射のみ落ちる)
+    }
+  }
   float hemi = 0.5 + 0.5 * N.y;
   vec3 amb = mix(uGndC, uSkyC, hemi);
   vec3 light = amb + sun;
@@ -215,6 +244,37 @@ void main(){
         brightProg = mkProg(FBRIGHT); blurProg = mkProg(FBLUR); compProg = mkProg(FCOMP);
         bloomOk = true;
       } catch (e) { bloomOk = false; console.warn('bloom disabled', e); }
+
+      // ---- シャドウマップ: 光源視点の深度を RGBA パックで描く ----
+      try {
+        const VDEP = `attribute vec3 aPos; uniform mat4 uLVP; varying float vD;
+          void main(){ vec4 p = uLVP * vec4(aPos,1.0); gl_Position = p; vD = p.z/p.w*0.5+0.5; }`;
+        const FDEP = `precision highp float; varying float vD;
+          vec4 packD(float d){ vec4 e = fract(vec4(1.0,255.0,65025.0,16581375.0)*d);
+            e -= e.yzww * vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0); return e; }
+          void main(){ gl_FragColor = packD(vD); }`;
+        depthProg = gl.createProgram();
+        gl.attachShader(depthProg, sh(gl.VERTEX_SHADER, VDEP));
+        gl.attachShader(depthProg, sh(gl.FRAGMENT_SHADER, FDEP));
+        gl.linkProgram(depthProg);
+        if (!gl.getProgramParameter(depthProg, gl.LINK_STATUS)) throw new Error('depth link');
+        shadowTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, shadowTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SHADOW_SIZE, SHADOW_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        shadowFbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, shadowTex, 0);
+        shadowRb = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, shadowRb);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, SHADOW_SIZE, SHADOW_SIZE);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, shadowRb);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        shadowOk = true;
+      } catch (e) { shadowOk = false; console.warn('shadow disabled', e); }
 
       // テクスチャアトラス(プロシージャル生成)をGPUへ
       if (G.Tex && G.Tex.build && G.Tex.build() && G.Tex.canvas) {
@@ -707,7 +767,6 @@ void main(){
     updateCamera(w, h);
     const GW = glCanvas.width, GH = glCanvas.height;
     const useBloom = bloomOk && !(G.settings && G.settings.bloom === false);
-    if (useBloom) { ensurePost(GW, GH); gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); }
 
     // ---- 時刻から空・光を決定(朝焼け/白昼/黄昏/星月夜) ----
     const zone = G.world.zone;
@@ -715,6 +774,41 @@ void main(){
     const dark = zone.dark ? 0.8 : G.time.darkness();
     const und = zone.underwater;
     const dusk = Math.max(0, 1 - Math.abs(frac - 0.81) / 0.06) + Math.max(0, 1 - Math.abs(frac - 0.18) / 0.05);
+
+    // ---- 太陽の向き(シャドウ&ライティング共用) ----
+    const dayT2 = G.U.clamp((frac - 0.20) / 0.60, 0, 1);
+    const isDay = frac > 0.20 && frac < 0.80 && !und && !zone.dark;
+    const _sunX = Math.cos((1 - dayT2) * Math.PI);
+    const _sunH = isDay ? 0.24 + Math.sin(dayT2 * Math.PI) * 0.92 : 0.7; // 朝夕は低く=長い影
+    let sunDir = [_sunX * 1.15, _sunH, -0.5];
+    { const l = Math.hypot(sunDir[0], sunDir[1], sunDir[2]); sunDir = [sunDir[0] / l, sunDir[1] / l, sunDir[2] / l]; }
+    if (und) sunDir = [0.2, 0.9, -0.3];
+
+    // ---- シャドウパス: 光源視点で地形の深度を描く ----
+    const useShadow = shadowOk && isDay && !(G.settings && G.settings.shadows === false);
+    if (useShadow && vertCount) {
+      const px = G.player.x, pz = G.player.y, py = groundAt(px, pz);
+      const D = 500;
+      const eye = [px + sunDir[0] * D, py + sunDir[1] * D, pz + sunDir[2] * D];
+      const up = Math.abs(sunDir[1]) > 0.95 ? [0, 0, 1] : [0, 1, 0];
+      const H = 470;
+      lightVP = M4.mul(M4.ortho(-H, H, -H, H, 1, 1100), M4.lookAt(eye, [px, py, pz], up));
+      gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFbo);
+      gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+      gl.clearColor(1, 1, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(depthProg);
+      gl.uniformMatrix4fv(gl.getUniformLocation(depthProg, 'uLVP'), false, lightVP);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      const aP2 = gl.getAttribLocation(depthProg, 'aPos');
+      gl.enableVertexAttribArray(aP2);
+      gl.vertexAttribPointer(aP2, 3, gl.FLOAT, false, 48, 0);
+      gl.enable(gl.DEPTH_TEST);
+      gl.drawArrays(gl.TRIANGLES, 0, vertCount);
+    }
+
+    if (useBloom) { ensurePost(GW, GH); gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); }
+    else gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const L3 = (a, b, t2) => [G.U.lerp(a[0], b[0], t2), G.U.lerp(a[1], b[1], t2), G.U.lerp(a[2], b[2], t2)];
     let zen = L3([0.30, 0.52, 0.86], [0.015, 0.03, 0.09], G.U.clamp(dark / 0.62, 0, 1));
     let hor = L3([0.72, 0.84, 0.96], [0.09, 0.11, 0.20], G.U.clamp(dark / 0.62, 0, 1));
@@ -774,20 +868,12 @@ void main(){
     gl.uniform1f(gl.getUniformLocation(prog, 'uFogDen'), zone.dark ? 3.2 : (und ? 2.6 : 1.0));
     gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), G.world.animT);
     gl.uniform1f(gl.getUniformLocation(prog, 'uCldSh'), (und || zone.dark || dark > 0.5) ? 0 : 1);
-    // ---- ライティング(太陽の向き・色・環境光を時刻から) ----
+    // ---- ライティング(太陽の向き=共用sunDir・色・環境光を時刻から) ----
     {
-      const fr2 = G.time.frac();
-      const dayT2 = G.U.clamp((fr2 - 0.20) / 0.60, 0, 1);
-      const isDay = fr2 > 0.20 && fr2 < 0.80 && !und && !zone.dark;
-      const sunX = Math.cos((1 - dayT2) * Math.PI); // 朝=東(+)/夕=西(-)
-      const sunH = isDay ? 0.35 + Math.sin(dayT2 * Math.PI) * 0.85 : 0.7;
-      let sd = [sunX * 0.8, sunH, -0.55];
-      const sl = Math.hypot(sd[0], sd[1], sd[2]); sd = [sd[0] / sl, sd[1] / sl, sd[2] / sl];
-      // 太陽色: 昼白〜黄昏橙、夜は月の青
       let sunCol, skyC, gndC;
       if (isDay) {
         const warm = dusk;
-        sunCol = [ (0.95 + 0.15 * warm) * 1.0, 0.92 - 0.22 * warm, 0.78 - 0.30 * warm ];
+        sunCol = [(0.95 + 0.15 * warm) * 1.0, 0.92 - 0.22 * warm, 0.78 - 0.30 * warm];
         skyC = [0.34, 0.42, 0.55];
         gndC = [0.28, 0.26, 0.22];
       } else {
@@ -796,13 +882,22 @@ void main(){
         skyC = [0.10, 0.13, 0.22];
         gndC = [0.06, 0.07, 0.10];
       }
-      if (und) { sunCol = [0.12, 0.28, 0.42]; skyC = [0.06, 0.16, 0.28]; gndC = [0.02, 0.06, 0.12]; sd = [0.2, 0.9, -0.3]; }
+      if (und) { sunCol = [0.12, 0.28, 0.42]; skyC = [0.06, 0.16, 0.28]; gndC = [0.02, 0.06, 0.12]; }
       if (zone.dark) { sunCol = [0.30, 0.34, 0.44]; skyC = [0.05, 0.06, 0.10]; gndC = [0.03, 0.03, 0.05]; }
-      gl.uniform3fv(gl.getUniformLocation(prog, 'uSunDir'), sd);
+      gl.uniform3fv(gl.getUniformLocation(prog, 'uSunDir'), sunDir);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uSunCol'), sunCol);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uSkyC'), skyC);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uGndC'), gndC);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uEye'), cam.eye);
+      // シャドウ
+      gl.uniform1f(gl.getUniformLocation(prog, 'uShadowOn'), useShadow ? 1 : 0);
+      if (useShadow) {
+        gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uLVP'), false, lightVP);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, shadowTex);
+        gl.uniform1i(gl.getUniformLocation(prog, 'uShadow'), 1);
+        gl.activeTexture(gl.TEXTURE0);
+      }
     }
     // マテリアルアトラス
     gl.uniform1f(gl.getUniformLocation(prog, 'uTexOn'), atlasTex ? 1 : 0);
