@@ -376,6 +376,11 @@ G.menus = (() => {
         G.R3D.invalidate();
         G.ui.toast(G.settings.render3d ? 'HD-3D描画に切替(フォグ・昼夜ライティング有効)' : 'クラシック2D描画に切替');
       });
+      btn(ctx, px + 426, y + 44, 130, 32, `ブルーム: ${G.settings.bloom !== false ? 'ON' : 'OFF'}`, () => {
+        G.settings.bloom = G.settings.bloom === false;
+        G.settings.save();
+        G.ui.toast(G.settings.bloom ? '発光ブルームON' : '発光ブルームOFF(軽量)');
+      });
       y += 88;
       btn(ctx, px + 16, y, 140, 32, 'タイトルへ戻る', () => { G.save.save('auto'); location.reload(); }, { danger: true });
       y += 52;

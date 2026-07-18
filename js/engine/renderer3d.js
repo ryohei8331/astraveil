@@ -162,7 +162,7 @@ void main(){
       const ui = document.getElementById('game');
       ui.style.position = 'relative'; ui.style.zIndex = '1';
       document.body.insertBefore(glCanvas, ui);
-      glCanvas.style.filter = 'saturate(1.14) contrast(1.05) brightness(1.02)'; // 色グレーディング
+      glCanvas.style.filter = 'saturate(1.28) contrast(1.10) brightness(1.02)'; // 色グレーディング(濃厚化)
       gl = glCanvas.getContext('webgl', { antialias: true });
       if (!gl) return false;
       const sh = (type, src) => {
@@ -246,7 +246,7 @@ void main(){
     D: '#4a5563', M: '#3a4258', ' ': '#07080e', _: '#0a0a12',
   };
   const PALBASE = {
-    grass: ['#3f7a34', '#376d2e', '#b39b6d', '#2b6b9e'], forest: ['#2c5c28', '#254f22', '#8d7a55', '#1f5d8a'],
+    grass: ['#3c7e2c', '#357024', '#bfa05e', '#2472a8'], forest: ['#2a5e22', '#22521c', '#8d7a55', '#1f5d8a'],
     swamp: ['#4a5c33', '#3f4f2c', '#7a7050', '#4a6a52'], volcano: ['#4a3833', '#41302c', '#6b5148', '#2b6b9e'],
     ruins: ['#37414e', '#2f3844', '#556273', '#274a66'], town: ['#4f8a41', '#467a39', '#c2a878', '#2b6b9e'],
     indoor: ['#6b5138', '#61492f', '#7a5e42', '#2b6b9e'], cave: ['#3a3440', '#332d38', '#584e60', '#1e3d5c'],
