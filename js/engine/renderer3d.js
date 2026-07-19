@@ -115,7 +115,7 @@ precision highp float;
 varying vec4 vCol; varying float vDepth; varying vec3 vW; varying vec2 vUV; varying vec3 vN;
 uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime; uniform float uCldSh;
 uniform sampler2D uTex; uniform float uTexOn;
-uniform vec3 uSunDir, uSunCol, uSkyC, uGndC, uEye;
+uniform vec3 uSunDir, uSunCol, uSkyC, uGndC, uEye, uZenC, uHorC;
 uniform mat4 uLVP; uniform sampler2D uShadow; uniform float uShadowOn;
 float unpackD(vec4 c){ return dot(c, vec4(1.0, 1.0/255.0, 1.0/65025.0, 1.0/16581375.0)); }
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -173,13 +173,22 @@ void main(){
   float rim = pow(1.0 - max(0.0, dot(N, V)), 3.5);
   light += uSkyC * rim * 0.6;
   c *= light;
-  // 水面: 太陽のスペキュラ + きらめき
+  // 水面: 空の反射 + 太陽のスペキュラ + きらめき
   if (vCol.a < 0.9) {
+    // さざ波で法線を微揺らし
+    vec3 wN = normalize(vec3(sin(vW.x * 0.10 + uTime * 1.6) * 0.10, 1.0, cos(vW.z * 0.12 + uTime * 1.3) * 0.10));
+    // 空の映り込み(フレネル): 浅い角度ほど強く反射
+    float fres = pow(1.0 - max(0.05, V.y), 3.2);
+    vec3 R = reflect(-V, wN);
+    vec3 refl = mix(uHorC, uZenC, clamp(R.y, 0.0, 1.0));
+    c = mix(c, refl, fres * 0.72);
+    // 光のコースティクス
     float sp = vn(vW.xz * 0.9 + vec2(uTime * 0.35, uTime * 0.22));
-    c += vec3(0.10, 0.12, 0.13) * smoothstep(0.72, 0.95, sp);
+    c += vec3(0.08, 0.10, 0.11) * smoothstep(0.74, 0.95, sp);
+    // 太陽のギラつき(鏡面反射)
     vec3 H = normalize(uSunDir + V);
-    float spec = pow(max(0.0, dot(N, H)), 60.0);
-    c += uSunCol * spec * 0.9;
+    float spec = pow(max(0.0, dot(wN, H)), 90.0);
+    c += uSunCol * spec * 1.6;
   }
   if (uCldSh > 0.01) { // ゆっくり流れる雲の影
     float cs2 = smoothstep(0.55, 0.80, vn(vW.xz * 0.012 + vec2(uTime * 0.009, uTime * 0.004)));
@@ -938,6 +947,8 @@ void main(){
       gl.uniform3fv(gl.getUniformLocation(prog, 'uSkyC'), skyC);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uGndC'), gndC);
       gl.uniform3fv(gl.getUniformLocation(prog, 'uEye'), cam.eye);
+      gl.uniform3fv(gl.getUniformLocation(prog, 'uZenC'), zen); // 水面反射用の空色
+      gl.uniform3fv(gl.getUniformLocation(prog, 'uHorC'), hor);
       // シャドウ
       gl.uniform1f(gl.getUniformLocation(prog, 'uShadowOn'), useShadow ? 1 : 0);
       if (useShadow) {
