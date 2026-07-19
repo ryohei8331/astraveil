@@ -619,6 +619,46 @@ void main(){
       }
     }
 
+    // ---- ボス専用アリーナの装飾(篝火・柱・発光魔法陣) ----
+    if (zn.mood === 'boss') {
+      const gh = (gx, gz) => (cornerH(Math.floor(gx / T), Math.floor(gz / T)) + cornerH(Math.floor(gx / T) + 1, Math.floor(gz / T) + 1)) / 2;
+      // テーマ色(篝火・紋)
+      const theme = zn.biome === 'ruins' ? [0.4, 0.95, 0.85]
+        : zn.biome === 'abyss' ? [0.35, 0.7, 1.0]
+          : zn.biome === 'moon' ? [0.78, 0.7, 1.0]
+            : zn.biome === 'volcano' ? [1.0, 0.5, 0.15]
+              : [1.0, 0.62, 0.25];
+      const pillarCol = hexRGB(pal[1]).map(v => v * 1.1);
+      // 篝火(4隅内側): 台座+柱+発光炎
+      const braz = [[4, 4], [S.tw - 5, 4], [4, S.th - 5], [S.tw - 5, S.th - 5]];
+      for (const [bx, bz] of braz) {
+        if (bx < 2 || bz < 2 || bx > S.tw - 2 || bz > S.th - 2) continue;
+        const cc = S.grid[bz] && S.grid[bz][bx];
+        if (cc === undefined || (HEIGHT[cc] || 0) > 0 || cc === '~' || cc === '_') continue;
+        const wx = bx * T + 16, wz = bz * T + 16, wy = gh(wx, wz);
+        setMat('rock');
+        boxAtY(pos, col, wx - 6, wz - 6, 12, wy, wy + 4, pillarCol.map(v => v * 0.8), 1); // 台座
+        boxAtY(pos, col, wx - 3.5, wz - 3.5, 7, wy + 4, wy + 26, pillarCol, 1);          // 柱
+        setMat(null);
+        boxAtY(pos, col, wx - 5, wz - 5, 10, wy + 25, wy + 30, [theme[0] * 1.4, theme[1] * 1.4, theme[2] * 1.4], 1); // 発光炎(ブルーム源)
+        lampList.push({ x: wx, y: wz, h: wy + 30 });
+      }
+      // 中央の発光魔法陣(ボス出現地点)
+      const cxw = (S.tw / 2) * T, czw = (S.th / 2) * T, cyw = gh(cxw, czw);
+      setMat('techfloor');
+      const ringN = 24, R1 = 90, R2 = 100;
+      for (let i = 0; i < ringN; i++) {
+        const a0 = i / ringN * Math.PI * 2, a1 = (i + 1) / ringN * Math.PI * 2;
+        push(pos, col, [
+          [cxw + Math.cos(a0) * R1, cyw + 0.4, czw + Math.sin(a0) * R1],
+          [cxw + Math.cos(a1) * R1, cyw + 0.4, czw + Math.sin(a1) * R1],
+          [cxw + Math.cos(a1) * R2, cyw + 0.4, czw + Math.sin(a1) * R2],
+          [cxw + Math.cos(a0) * R2, cyw + 0.4, czw + Math.sin(a0) * R2],
+        ], [theme[0] * 1.2, theme[1] * 1.2, theme[2] * 1.2], 1, undefined, [0, 1, 0]);
+      }
+      setMat(null);
+    }
+
     const up = (buf, p, cl, uvA, nA) => {
       const n = p.length / 3;
       const data = new Float32Array(n * 12);
