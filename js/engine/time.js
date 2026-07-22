@@ -36,5 +36,6 @@ G.time = (() => {
   };
   const save = () => ({ t: S.t, day: S.day });
   const load = d => { if (d) { S.t = d.t; S.day = d.day; } };
-  return { S, DAY_LEN, frac, isNight, moonPhase, isFullMoon, moonName, clock, darkness, update, advanceToMorning, save, load };
+  const reset = () => { S.t = DAY_LEN * 0.30; S.day = 1; };
+  return { S, DAY_LEN, frac, isNight, moonPhase, isFullMoon, moonName, clock, darkness, update, advanceToMorning, save, load, reset };
 })();

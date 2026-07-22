@@ -381,7 +381,23 @@ G.menus = (() => {
         G.settings.save();
         G.ui.toast(G.settings.bloom ? '発光ブルームON' : '発光ブルームOFF(軽量)');
       });
-      y += 88;
+      // 画質プリセット
+      ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(`画質(現在: ${G.settings.quality || 'auto'})`, px + 16, y + 90);
+      ['low', 'medium', 'high', 'auto'].forEach((q, i) => {
+        btn(ctx, px + 16 + i * 92, y + 96, 86, 28, q === 'auto' ? '自動' : q === 'low' ? '低(軽い)' : q === 'medium' ? '中' : '高', () => {
+          if (q === 'auto') { G.settings.quality = 'auto'; G.settings.save(); G.ui.toast('画質: 自動(FPSに応じて調整)'); }
+          else G.settings.applyPreset(q);
+          G.game.reresize && G.game.reresize();
+        }, { active: (G.settings.quality || 'auto') === q, size: 11 });
+      });
+      const fps = G.game.fpsInfo ? G.game.fpsInfo() : null;
+      if (fps) {
+        ctx.fillStyle = fps.fps < 30 ? '#ff9d9d' : fps.fps < 50 ? '#ffd75e' : '#7ee0a3';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(`実測 ${fps.fps.toFixed(0)}FPS(${fps.avgMs.toFixed(1)}ms)${fps.deg > 0 ? ' / 自動軽量化Lv' + fps.deg : ''}`, px + 400, y + 108);
+      }
+      y += 140;
       btn(ctx, px + 16, y, 140, 32, 'タイトルへ戻る', () => { G.save.save('auto'); location.reload(); }, { danger: true });
       y += 52;
       ctx.fillStyle = '#9aa3b2'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';

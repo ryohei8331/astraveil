@@ -4,9 +4,24 @@ G.VERSION = '3.0.0';
 
 // 恒久設定(セーブとは別枠)
 G.settings = (() => {
-  let s = { render3d: true, showGuide: true, bloom: true, shadows: true };
+  let s = { render3d: true, showGuide: true, bloom: true, shadows: true, quality: 'auto', maxDpr: 1.25 };
   try { Object.assign(s, JSON.parse(localStorage.getItem('astraveil_settings') || '{}')); } catch (e) { }
-  s.save = () => { try { localStorage.setItem('astraveil_settings', JSON.stringify({ render3d: s.render3d, showGuide: s.showGuide, bloom: s.bloom, shadows: s.shadows })); } catch (e) { } };
+  s.save = () => {
+    try {
+      localStorage.setItem('astraveil_settings', JSON.stringify({
+        render3d: s.render3d, showGuide: s.showGuide, bloom: s.bloom, shadows: s.shadows,
+        quality: s.quality, maxDpr: s.maxDpr,
+      }));
+    } catch (e) { }
+  };
+  // 品質プリセット(手動選択で auto を上書き)
+  s.applyPreset = q => {
+    if (q === 'low') { s.bloom = false; s.shadows = false; s.maxDpr = 1; }
+    else if (q === 'medium') { s.bloom = false; s.shadows = true; s.maxDpr = 1.25; }
+    else if (q === 'high') { s.bloom = true; s.shadows = true; s.maxDpr = 1.5; }
+    s.quality = q; s.save();
+    if (G.R3D) G.R3D.invalidate();
+  };
   return s;
 })();
 
@@ -43,6 +58,12 @@ G.game = {
   },
 
   newGame(name) {
+    // 新キャラは専用スロットに保存(既存キャラを上書きしない)
+    if (G.save.newCharKey) G.save.newCharKey();
+    // 新キャラ用の初期化(Social/Quests/Timeを白紙に)
+    if (G.Social && G.Social.reset) G.Social.reset();
+    if (G.quests && G.quests.reset) G.quests.reset();
+    if (G.time && G.time.reset) G.time.reset();
     const p = G.Player.create(name);
     G.Items.give('bread', 3);
     G.Items.give('potion_s', 2);
@@ -149,12 +170,14 @@ G.game = {
   let dpr = 1;
 
   const resize = () => {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cap = (G.settings && G.settings.maxDpr) || 1.25;
+    dpr = Math.min(window.devicePixelRatio || 1, cap);
     G.game.vw = window.innerWidth; G.game.vh = window.innerHeight;
     canvas.width = G.game.vw * dpr; canvas.height = G.game.vh * dpr;
     canvas.style.width = G.game.vw + 'px'; canvas.style.height = G.game.vh + 'px';
     G.input.layout(G.game.vw, G.game.vh);
   };
+  G.game.reresize = resize;
   window.addEventListener('resize', resize);
   resize();
   G.input.init(canvas);
@@ -276,12 +299,27 @@ G.game = {
     if (g.fade > 0) { ctx.fillStyle = `rgba(4,6,10,${g.fade})`; ctx.fillRect(0, 0, w, h); }
   };
 
+  // 自動品質デグレード: 平均フレームが重い→段階的に機能を落とす
+  let ftAvg = 16.7, degStage = 0, degCooldown = 3;
   const loop = now => {
-    acc += Math.min(0.25, (now - last) / 1000); // 低FPS環境でも実時間を追従(上限は暴走防止)
-    last = now;
+    const raw = (now - last) / 1000;
+    acc += Math.min(0.25, raw); last = now;
+    ftAvg = ftAvg * 0.92 + raw * 1000 * 0.08;
     while (acc >= STEP) { update(STEP); acc -= STEP; G.input.endFrame(); }
     render();
+    // auto品質: 平均FPS<28で1段階ずつ落とす(3秒クールダウン)
+    if (G.settings.quality === 'auto' && G.R3D && G.R3D.ok && G.game.mode === 'play') {
+      degCooldown -= raw;
+      if (ftAvg > 36 && degCooldown <= 0 && degStage < 3) {
+        degStage++; degCooldown = 3;
+        if (degStage === 1) { G.settings.bloom = false; G.ui && G.ui.toast('ブルーム自動OFF(軽量化)'); }
+        else if (degStage === 2) { G.settings.maxDpr = 1.0; G.game.reresize && G.game.reresize(); G.ui && G.ui.toast('描画解像度を下げました'); }
+        else if (degStage === 3) { G.settings.shadows = false; G.ui && G.ui.toast('影を自動OFF(最軽量)'); }
+        G.settings.save(); if (G.R3D) G.R3D.invalidate();
+      }
+    }
     requestAnimationFrame(loop);
   };
+  G.game.fpsInfo = () => ({ avgMs: ftAvg, fps: 1000 / ftAvg, deg: degStage });
   requestAnimationFrame(loop);
 })();

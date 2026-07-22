@@ -16,7 +16,7 @@ G.R3D = (() => {
   let bloomA = null, bloomB = null;
   // シャドウマッピング
   let shadowOk = false, depthProg = null, shadowFbo = null, shadowTex = null, shadowRb = null;
-  const SHADOW_SIZE = 1024;
+  const SHADOW_SIZE = 512; // 1024→512(4倍軽)
   let lightVP = null;
 
   // ---- 最小限の行列演算 ----
@@ -114,7 +114,7 @@ void main(){
 precision highp float;
 varying vec4 vCol; varying float vDepth; varying vec3 vW; varying vec2 vUV; varying vec3 vN;
 uniform vec3 uFog; uniform float uFogDen; uniform highp float uTime; uniform float uCldSh;
-uniform sampler2D uTex; uniform float uTexOn;
+uniform sampler2D uTex; uniform float uTexOn; uniform float uBumpOn;
 uniform vec3 uSunDir, uSunCol, uSkyC, uGndC, uEye, uZenC, uHorC;
 uniform mat4 uLVP; uniform sampler2D uShadow; uniform float uShadowOn;
 float unpackD(vec4 c){ return dot(c, vec4(1.0, 1.0/255.0, 1.0/65025.0, 1.0/16581375.0)); }
@@ -129,16 +129,17 @@ void main(){
   vec3 c = vCol.rgb;
   vec3 N = normalize(vN);
   if (uTexOn > 0.5 && vUV.x >= 0.0) {
-    float o = 1.5 / 256.0;
     float det = texture2D(uTex, vUV).r;
-    float dU = texture2D(uTex, vUV + vec2(o, 0.0)).r - texture2D(uTex, vUV - vec2(o, 0.0)).r;
-    float dV = texture2D(uTex, vUV + vec2(0.0, o)).r - texture2D(uTex, vUV - vec2(0.0, o)).r;
     c *= (0.46 + det * 0.62);
-    // 質感の勾配で法線を傾け、凹凸が光を受ける
-    vec3 up2 = abs(N.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 T = normalize(cross(up2, N));
-    vec3 Bt = cross(N, T);
-    N = normalize(N - (T * dU + Bt * dV) * 2.4);
+    if (uBumpOn > 0.5) {
+      float o = 1.5 / 256.0;
+      float dU = texture2D(uTex, vUV + vec2(o, 0.0)).r - texture2D(uTex, vUV - vec2(o, 0.0)).r;
+      float dV = texture2D(uTex, vUV + vec2(0.0, o)).r - texture2D(uTex, vUV - vec2(0.0, o)).r;
+      vec3 up2 = abs(N.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+      vec3 T = normalize(cross(up2, N));
+      vec3 Bt = cross(N, T);
+      N = normalize(N - (T * dU + Bt * dV) * 2.4);
+    }
   } else {
     vec2 q = vW.xz + vW.y * 0.6;
     float g = vn(q * 0.16) * 0.45 + vn(q * 0.75) * 0.35 + vn(q * 3.1) * 0.20;
@@ -156,13 +157,16 @@ void main(){
     if (pc.x > 0.005 && pc.x < 0.995 && pc.y > 0.005 && pc.y < 0.995 && pc.z < 1.0) {
       float bias = max(0.0016, 0.006 * (1.0 - ndl));
       float cur = pc.z - bias;
-      float lit = 0.0; float tx = 1.0 / 1024.0;
-      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
-        float d = unpackD(texture2D(uShadow, pc.xy + vec2(float(i), float(j)) * tx));
-        lit += cur <= d ? 1.0 : 0.0;
-      }
-      float shd = lit / 9.0;
-      sun *= 0.12 + 0.88 * shd; // 影は濃く(直射のみ落ちる)
+      float tx = 1.0 / 512.0;
+      // 5タップ十字PCF(3x3=9タップ→5タップに削減、体感変わらず高速)
+      float lit = 0.0;
+      lit += cur <= unpackD(texture2D(uShadow, pc.xy)) ? 1.0 : 0.0;
+      lit += cur <= unpackD(texture2D(uShadow, pc.xy + vec2(tx, 0.0))) ? 1.0 : 0.0;
+      lit += cur <= unpackD(texture2D(uShadow, pc.xy - vec2(tx, 0.0))) ? 1.0 : 0.0;
+      lit += cur <= unpackD(texture2D(uShadow, pc.xy + vec2(0.0, tx))) ? 1.0 : 0.0;
+      lit += cur <= unpackD(texture2D(uShadow, pc.xy - vec2(0.0, tx))) ? 1.0 : 0.0;
+      float shd = lit / 5.0;
+      sun *= 0.12 + 0.88 * shd;
     }
   }
   float hemi = 0.5 + 0.5 * N.y;
@@ -961,6 +965,9 @@ void main(){
     }
     // マテリアルアトラス
     gl.uniform1f(gl.getUniformLocation(prog, 'uTexOn'), atlasTex ? 1 : 0);
+    // バンプ: DPR>=1.25 かつ shadows OFF でない時のみ(重すぎる時は自動オフ)
+    const bumpOn = (G.settings && G.settings.maxDpr >= 1.2 && G.settings.shadows !== false) ? 1 : 0;
+    gl.uniform1f(gl.getUniformLocation(prog, 'uBumpOn'), bumpOn);
     if (atlasTex) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, atlasTex);

@@ -156,8 +156,9 @@ G.quests = (() => {
   const save = () => ({ flags: S.flags, active: S.active, completed: S.completed });
   const load = d => { if (d) { S.flags = d.flags || {}; S.active = d.active || {}; S.completed = d.completed || {}; } };
 
+  const reset = () => { S.flags = {}; S.active = {}; S.completed = {}; };
   return {
     get flags() { return S.flags; }, get active() { return S.active; }, get completed() { return S.completed; },
-    conds, start, advance, complete, setWorldFlag, applyCurse, fire, save, load,
+    conds, start, advance, complete, setWorldFlag, applyCurse, fire, save, load, reset,
   };
 })();

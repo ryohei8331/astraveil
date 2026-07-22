@@ -85,13 +85,17 @@ G.title = (() => {
 
     const bw = Math.min(300, w - 60), bx = w / 2 - bw / 2;
     if (S.step === 'main') {
-      let y = h * 0.46;
-      const hasAuto = G.save.meta('auto');
-      if (hasAuto) {
-        btn(ctx, bx, y, bw, 46, `続きから(${hasAuto.name} Lv.${hasAuto.level})`, () => { G.save.load('auto'); }, { rec: true, bold: true, size: 14 });
+      let y = h * 0.44;
+      const roster = G.save.roster ? G.save.roster() : [];
+      const hasAny = roster.length > 0;
+      if (hasAny) {
+        const top = roster[0];
+        btn(ctx, bx, y, bw, 46, `続きから(${top.name} Lv.${top.level})`, () => G.save.load(top.key), { rec: true, bold: true, size: 14 });
         y += 56;
+        btn(ctx, bx, y, bw, 40, `キャラクター選択(${roster.length})`, () => { S.step = 'chars'; G.audio.sfx('ui'); }, { size: 13 });
+        y += 50;
       }
-      btn(ctx, bx, y, bw, 46, 'はじめから', () => { S.step = 'server'; G.audio.sfx('ui'); }, { rec: !hasAuto, bold: true }); y += 56;
+      btn(ctx, bx, y, bw, 46, hasAny ? '新しいキャラで始める' : 'はじめから', () => { S.step = 'server'; G.audio.sfx('ui'); }, { rec: !hasAny, bold: true }); y += 56;
       btn(ctx, bx, y, bw, 38, '操作方法', () => {
         G.dialog.open('操作マニュアル', [
           '【移動】WASD / 矢印キー。スマホは画面左側をドラッグ。',
@@ -119,6 +123,35 @@ G.title = (() => {
         ctx.fillText(`${sv.note} / 負荷:${sv.pop} / ping ${sv.ping}ms`, bx + 14, y + 37);
       });
       btn(ctx, bx, h * 0.47 + 3 * 56 + 6, bw, 32, '戻る', () => { S.step = 'main'; }, { size: 12 });
+    }
+    if (S.step === 'chars') {
+      ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 15px "Hiragino Kaku Gothic ProN", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('キャラクター選択', w / 2, h * 0.30);
+      ctx.fillStyle = 'rgba(200,216,235,.55)'; ctx.font = '10px sans-serif';
+      ctx.fillText('※このブラウザ(端末)ごとに保存されます。他の端末では独立して遊べます。', w / 2, h * 0.32);
+      ctx.textAlign = 'left';
+      const roster = G.save.roster();
+      const cardW = Math.min(560, w - 40), cx = w / 2 - cardW / 2;
+      const cardH = 62, top = h * 0.36;
+      const maxRows = Math.min(roster.length, 5);
+      for (let i = 0; i < maxRows; i++) {
+        const m = roster[i], ry = top + i * (cardH + 6);
+        btn(ctx, cx, ry, cardW - 84, cardH, '', () => G.save.load(m.key));
+        ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 14px "Hiragino Kaku Gothic ProN", sans-serif';
+        ctx.fillText(`${m.name}  Lv.${m.level}${m.clan ? '  ' + m.clan : ''}`, cx + 14, ry + 22);
+        ctx.fillStyle = '#9aa3b2'; ctx.font = '10px sans-serif';
+        ctx.fillText(`${m.zone} / 討伐 ${m.kills} / 名声 ${m.fame} / ${m.playMin}分 / 前回: ${m.date}`, cx + 14, ry + 42);
+        // 削除ボタン
+        btn(ctx, cx + cardW - 78, ry + 8, 70, 46, '削除', () => {
+          if (window.confirm(`${m.name} Lv.${m.level} を削除しますか?(取り消せません)`)) {
+            G.save.removeChar(m.key);
+          }
+        }, { danger: true, size: 11 });
+      }
+      const yBot = top + maxRows * (cardH + 6) + 6;
+      btn(ctx, cx, yBot, (cardW - 8) / 2, 40, '＋ 新しいキャラで始める', () => { S.step = 'server'; }, { rec: true, size: 13 });
+      btn(ctx, cx + cardW / 2 + 4, yBot, (cardW - 8) / 2, 40, '戻る', () => { S.step = 'main'; }, { size: 13 });
+      btn(ctx, cx, yBot + 46, cardW, 32, 'JSONを読み込んで新キャラに追加', () => G.save.importJson(), { size: 12 });
     }
     if (S.step === 'credits') {
       ctx.textAlign = 'center';
