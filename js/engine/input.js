@@ -18,24 +18,51 @@ G.input = (() => {
   const press = a => { if (!held[a]) pressedNow.add(a); held[a] = true; };
   const release = a => { held[a] = false; };
 
+  // iOS Safariのホームバー等のsafe-area(CSS env)をJSから取得
+  const safeInsets = () => {
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      return {
+        top: parseFloat(cs.getPropertyValue('--sat')) || 0,
+        bottom: parseFloat(cs.getPropertyValue('--sab')) || 0,
+        left: parseFloat(cs.getPropertyValue('--sal')) || 0,
+        right: parseFloat(cs.getPropertyValue('--sar')) || 0,
+      };
+    } catch (e) { return { top: 0, bottom: 0, left: 0, right: 0 }; }
+  };
+
   const layout = (w, h) => {
     W = w; H = h;
-    const s = Math.min(w, h) / 420; // スケール
-    const bx = w - 70 * s, by = h - 80 * s;
+    const s = Math.min(w, h) / 420;
+    const si = safeInsets();
+    // safe-area分だけ内側にオフセットして、ホームバーやノッチに絶対にかからないようにする
+    const R = w - si.right, L = si.left, B = h - si.bottom, T = si.top;
+    // 右下に大きな攻撃ボタン、その周りにサブボタン(半径どうしが決して重ならない距離を確保)
+    const bx = R - 66 * s, by = B - 78 * s;
+    // 十分な離間: 各ボタンの中心距離が両者の半径の和より大きいこと
     touchButtons = [
-      { action: 'attack', x: bx, y: by, r: 42 * s, label: '⚔' },
-      { action: 'dodge', x: bx - 78 * s, y: by + 26 * s, r: 30 * s, label: '💨' },
-      { action: 'magic', x: bx - 40 * s, y: by - 74 * s, r: 30 * s, label: '✨' },
-      { action: 'interact', x: bx - 112 * s, y: by - 52 * s, r: 26 * s, label: '🔍' },
-      { action: 'skill1', x: w * 0.42, y: h - 34 * s, r: 20 * s, label: '1' },
-      { action: 'skill2', x: w * 0.42 + 46 * s, y: h - 34 * s, r: 20 * s, label: '2' },
-      { action: 'skill3', x: w * 0.42 + 92 * s, y: h - 34 * s, r: 20 * s, label: '3' },
-      { action: 'skill4', x: w * 0.42 + 138 * s, y: h - 34 * s, r: 20 * s, label: '4' },
-      { action: 'menu', x: w - 30 * s, y: 90 * s, r: 20 * s, label: '☰' },
+      { action: 'attack', x: bx, y: by, r: 44 * s, label: '⚔' },
+      { action: 'dodge', x: bx - 96 * s, y: by + 8 * s, r: 30 * s, label: '💨' }, // attack左
+      { action: 'magic', x: bx - 20 * s, y: by - 92 * s, r: 30 * s, label: '✨' }, // attack上
+      { action: 'interact', x: bx - 108 * s, y: by - 74 * s, r: 28 * s, label: '🔍' }, // magic左下
+      // スキル1-4: 画面下中央に並べる(safe-area 上)
+      { action: 'skill1', x: w * 0.36, y: B - 30 * s, r: 22 * s, label: '1' },
+      { action: 'skill2', x: w * 0.36 + 52 * s, y: B - 30 * s, r: 22 * s, label: '2' },
+      { action: 'skill3', x: w * 0.36 + 104 * s, y: B - 30 * s, r: 22 * s, label: '3' },
+      { action: 'skill4', x: w * 0.36 + 156 * s, y: B - 30 * s, r: 22 * s, label: '4' },
+      { action: 'menu', x: R - 30 * s, y: T + 82 * s, r: 22 * s, label: '☰' },
     ];
   };
 
-  const findBtn = (x, y) => touchButtons.find(b => G.U.dist(x, y, b.x, b.y) <= b.r * 1.25);
+  // 厳密判定: 見た目通り半径以内かつ最も近いボタンだけを返す(拡大判定はしない=誤タップ根絶)
+  const findBtn = (x, y) => {
+    let best = null, bestD = Infinity;
+    for (const b of touchButtons) {
+      const d = G.U.dist(x, y, b.x, b.y);
+      if (d <= b.r && d < bestD) { bestD = d; best = b; }
+    }
+    return best;
+  };
 
   const init = canvas => {
     canvasEl = canvas;
@@ -68,6 +95,8 @@ G.input = (() => {
       const r = canvas.getBoundingClientRect();
       return { x: t.clientX - r.left, y: t.clientY - r.top };
     };
+    // 素タップ(ボタン外)攻撃のtouchIdを追跡し、その指を離したときだけ解放
+    let tapAttackIds = new Set();
     canvas.addEventListener('touchstart', e => {
       e.preventDefault(); touchMode = true; G.audio.ensure();
       for (const t of e.changedTouches) {
@@ -76,8 +105,14 @@ G.input = (() => {
         if (G.ui && G.ui.handleTap && G.ui.handleTap(p.x, p.y)) continue;
         const b = findBtn(p.x, p.y);
         if (b) { press(b.action); b.heldId = t.identifier; }
-        else if (p.x < W * 0.45 && !stick) stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y };
-        else press('attack'); // 右側素タップ=攻撃
+        else if (p.x < W * 0.42 && !stick) {
+          // 左側=バーチャルスティック(移動)
+          stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y };
+        } else {
+          // 右側の何もない場所=攻撃(あなたの要望どおり)
+          press('attack');
+          tapAttackIds.add(t.identifier);
+        }
       }
     }, { passive: false });
     canvas.addEventListener('touchmove', e => {
@@ -89,9 +124,17 @@ G.input = (() => {
     }, { passive: false });
     const endTouch = e => {
       for (const t of e.changedTouches) {
-        if (stick && t.identifier === stick.id) stick = null;
-        for (const b of touchButtons) if (b.heldId === t.identifier) { release(b.action); b.heldId = undefined; }
-        release('attack');
+        if (stick && t.identifier === stick.id) { stick = null; continue; }
+        // このタッチがどのボタンだったかを厳密に判定して、そのボタンだけ解放
+        let handled = false;
+        for (const b of touchButtons) {
+          if (b.heldId === t.identifier) { release(b.action); b.heldId = undefined; handled = true; break; }
+        }
+        if (handled) continue;
+        if (tapAttackIds.has(t.identifier)) {
+          tapAttackIds.delete(t.identifier);
+          if (tapAttackIds.size === 0) release('attack'); // 全ての素タップが離れて初めて解放
+        }
       }
     };
     canvas.addEventListener('touchend', endTouch);

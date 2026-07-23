@@ -109,6 +109,7 @@ G.world = (() => {
     G.audio.setMood(def.mood || 'field');
     if (G.ui) G.ui.banner(def.name);
     if (G.quests) G.quests.fire('enter', { zone: zoneId });
+    if (G.Pet) G.Pet.summonAll(); // 仲間モンスターを一緒に連れて行く
   };
 
   const add = e => { W.entities.push(e); return e; };

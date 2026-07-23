@@ -64,6 +64,7 @@ G.game = {
     if (G.Social && G.Social.reset) G.Social.reset();
     if (G.quests && G.quests.reset) G.quests.reset();
     if (G.time && G.time.reset) G.time.reset();
+    if (G.Pet && G.Pet.reset) G.Pet.reset();
     const p = G.Player.create(name);
     G.Items.give('bread', 3);
     G.Items.give('potion_s', 2);

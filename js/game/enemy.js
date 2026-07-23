@@ -20,7 +20,19 @@ G.Enemy = (() => {
   const effSpeed = e => e.speed * (e.slowT > 0 ? 0.5 : 1) * (e.enrage ? 1.4 : 1);
   const contact = (e, mult = 1, label) => {
     const p = G.player;
-    if (p.dead || e.contactCd > 0) return;
+    if (e.contactCd > 0) return;
+    // ペット/仲間NPCとの接触も判定(ペットが盾になる)
+    const petHit = G.world.entities.find(pt => (pt.kind === 'pet' || pt.kind === 'ally') && !pt.dead && pt.hp > 0
+      && G.U.dist(e.x, e.y, pt.x, pt.y) < e.r + pt.r + 3);
+    if (petHit) {
+      e.contactCd = 0.6;
+      const dmg = Math.round(e.atk * mult * 0.7);
+      if (petHit.onHit) petHit.onHit(dmg); else petHit.hp -= dmg;
+      G.fx.float(petHit.x, petHit.y - 20, dmg, { color: '#ffb0b0', size: 12 });
+      G.fx.burst(petHit.x, petHit.y - 6, '#ff8080', 5, 90);
+      return;
+    }
+    if (p.dead) return;
     if (G.U.dist(e.x, e.y, p.x, p.y) < e.r + p.r + 4) {
       e.contactCd = 0.8;
       G.Combat.hitPlayer(e.atk * mult, { from: e.def.name, label: label || e.def.name });
@@ -885,6 +897,15 @@ G.Enemy = (() => {
     // 延焼・鈍足の印
     if (e.burn) { ctx.fillStyle = 'rgba(255,140,66,.8)'; ctx.beginPath(); ctx.arc(px + G.U.rnd(-4, 4), py - S - 4, 2.5, 0, 7); ctx.fill(); }
     if (e.slowT > 0) { ctx.fillStyle = 'rgba(94,185,255,.7)'; ctx.fillRect(px - 4, py - S - 8, 8, 2); }
+    // 弱った敵にはテイム可能マーク(黄色の🍖)
+    if (G.Pet && G.Pet.canTame(e)) {
+      const bob = Math.sin(G.world.animT * 4) * 1.5;
+      ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText('🍖', px, py - S - 20 + bob);
+      ctx.fillStyle = '#ffd75e'; ctx.font = '9px sans-serif';
+      ctx.fillText('E: 食料を与える', px, py - S - 32);
+      ctx.textAlign = 'left';
+    }
     // HPバー
     if (e.aggro && e.hp < e.hpMax && !e.def.boss) {
       const w = 26;

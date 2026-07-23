@@ -360,6 +360,23 @@ G.Player = (() => {
       },
 
       tryInteract() {
+        // まず弱った敵がいれば「テイム(食べ物を与える)」を優先
+        if (G.Pet) {
+          const weak = G.world.near(this.x, this.y, 66, G.Pet.canTame);
+          if (weak.length) {
+            weak.sort((a, b) => G.U.dist(this.x, this.y, a.x, a.y) - G.U.dist(this.x, this.y, b.x, b.y));
+            const target = weak[0];
+            const foods = G.Pet.foodIds();
+            if (!foods.length) { G.ui.toast(`${target.def.name}は弱っている! 食べ物(パン等)があれば仲間にできる`); return; }
+            const items = foods.map(id => `${G.DATA.items[id].icon || ''}${G.DATA.items[id].name}(${G.Items.count(id)})`).join(' / ');
+            G.dialog.open(target.def.name, [
+              `弱った ${target.def.name} が息を切らしている……`,
+              `食べ物を差し出すと、仲間になるかもしれない。手持ちの食料: ${items}`,
+              `${G.DATA.items[foods[0]].name}を差し出す?(なつく確率は幸運LUCで上がる)`,
+            ], () => G.Pet.tryTame(target, foods[0]));
+            return;
+          }
+        }
         const list = G.world.near(this.x, this.y, 66, e => e.interact && !e.dead);
         if (!list.length) return;
         list.sort((a, b) => G.U.dist(this.x, this.y, a.x, a.y) - G.U.dist(this.x, this.y, b.x, b.y));

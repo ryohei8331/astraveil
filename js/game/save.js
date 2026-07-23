@@ -20,6 +20,7 @@ G.save = (() => {
         customSkills: p.customSkills || [], tutorDone: !!p.tutorDone,
       },
       social: G.Social ? G.Social.save() : null,
+      pet: G.Pet ? G.Pet.save() : null,
       zone: G.world.zoneId,
       respawn: G.game.respawnPoint,
       quests: G.quests.save(),
@@ -70,6 +71,7 @@ G.save = (() => {
     Object.assign(p, d.player);
     if (G.SkillForge) G.SkillForge.restore(p);
     if (G.Social && d.social) G.Social.load(d.social);
+    if (G.Pet) { G.Pet.reset(); if (d.pet) G.Pet.load(d.pet); }
     G.quests.load(d.quests);
     G.time.load(d.time);
     G.game.respawnPoint = d.respawn;
