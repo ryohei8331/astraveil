@@ -173,13 +173,23 @@ G.game = {
   const resize = () => {
     const cap = (G.settings && G.settings.maxDpr) || 1.25;
     dpr = Math.min(window.devicePixelRatio || 1, cap);
-    G.game.vw = window.innerWidth; G.game.vh = window.innerHeight;
+    // iOS: visualViewport の方がアドレスバー伸縮まで正確
+    const vv = window.visualViewport;
+    G.game.vw = Math.floor(vv ? vv.width : window.innerWidth);
+    G.game.vh = Math.floor(vv ? vv.height : window.innerHeight);
     canvas.width = G.game.vw * dpr; canvas.height = G.game.vh * dpr;
     canvas.style.width = G.game.vw + 'px'; canvas.style.height = G.game.vh + 'px';
     G.input.layout(G.game.vw, G.game.vh);
   };
   G.game.reresize = resize;
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+  // iOSアドレスバーの遅延伸縮に追従(初回2秒間、200ms毎に再測定)
+  { let n = 0; const iv = setInterval(() => { resize(); if (++n > 10) clearInterval(iv); }, 200); }
   resize();
   G.input.init(canvas);
   if (G.R3D) G.R3D.init(); // WebGL不可なら自動で2D続行

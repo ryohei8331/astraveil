@@ -18,15 +18,24 @@ G.input = (() => {
   const press = a => { if (!held[a]) pressedNow.add(a); held[a] = true; };
   const release = a => { held[a] = false; };
 
-  // iOS Safariのホームバー等のsafe-area(CSS env)をJSから取得
+  // iOS Safari の safe-area を「実測」する: 隠しdivを作り env() を calc に解決させて読む
+  // (getComputedStyle('--sat') は env(...) を未解決の文字列で返す→NaNになるバグ回避)
+  let _safeProbe = null;
   const safeInsets = () => {
     try {
-      const cs = getComputedStyle(document.documentElement);
+      if (!_safeProbe) {
+        _safeProbe = document.createElement('div');
+        _safeProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;left:0;top:0;width:0;height:0;' +
+          'padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);' +
+          'padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);';
+        document.body.appendChild(_safeProbe);
+      }
+      const cs = getComputedStyle(_safeProbe);
       return {
-        top: parseFloat(cs.getPropertyValue('--sat')) || 0,
-        bottom: parseFloat(cs.getPropertyValue('--sab')) || 0,
-        left: parseFloat(cs.getPropertyValue('--sal')) || 0,
-        right: parseFloat(cs.getPropertyValue('--sar')) || 0,
+        top: parseFloat(cs.paddingTop) || 0,
+        bottom: parseFloat(cs.paddingBottom) || 0,
+        left: parseFloat(cs.paddingLeft) || 0,
+        right: parseFloat(cs.paddingRight) || 0,
       };
     } catch (e) { return { top: 0, bottom: 0, left: 0, right: 0 }; }
   };
