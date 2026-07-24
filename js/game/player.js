@@ -192,6 +192,10 @@ G.Player = (() => {
         // 回復
         if (this.stmDelay <= 0 && this.hunger > 20) this.stm = Math.min(this.stmMax, this.stm + 19 * pdt);
         this.mp = Math.min(this.mpMax, this.mp + (2 + this.stats.TEC * 0.05) * pdt);
+        // 街のゾーンは安全地帯: HPも緩やかに自然回復(戦闘中の被弾後2秒は無効化)
+        if (G.world.zone && G.world.zone.town && this.hurtT <= 0 && !G.world.bossActive) {
+          this.hp = Math.min(this.hpMax, this.hp + (2.5 + this.stats.VIT * 0.08) * pdt);
+        }
 
         if (G.game.mode !== 'play' || this.staggerT > 0) return;
 

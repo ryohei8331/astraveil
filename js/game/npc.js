@@ -141,6 +141,38 @@ G.NPC = (() => {
         ctx.fillStyle = '#d8c390'; ctx.fillRect(px - 10, py - 16, 8, 6);
         nameplate(ctx, px, py - 34, '掲示板', '#e8d8a0');
       } };
+    if (p.type === 'rest') return { ...base, r: 16, restCd: 0,
+      update(dt) { this.t += dt; if (this.restCd > 0) this.restCd -= dt; },
+      interact() {
+        const pl = G.player;
+        if (this.restCd > 0) { G.ui.toast(`まだ疲れが取れない…(${Math.ceil(this.restCd)}秒後)`); return; }
+        if (G.world.bossActive) { G.ui.toast('戦闘中は休憩できない'); return; }
+        pl.hp = pl.hpMax; pl.mp = pl.mpMax; pl.stm = pl.stmMax;
+        pl.statusEf = {};
+        this.restCd = 20;
+        G.audio.sfx('heal');
+        G.fx.ring(pl.x, pl.y, '#7ee0a3', 60, 0.6);
+        G.fx.float(pl.x, pl.y - 40, '休憩: 全回復!', { color: '#7ee0a3', size: 14 });
+      },
+      draw(ctx, cam) {
+        const px = this.x - cam.x, py = this.y - cam.y;
+        // 焚き火/泉風のプロップ: 石の輪+中央の光
+        ctx.fillStyle = '#5a4a3a';
+        for (let a = 0; a < 6; a++) {
+          const ax = px + Math.cos(a) * 10, ay = py + Math.sin(a) * 5;
+          ctx.beginPath(); ctx.ellipse(ax, ay, 3, 2.2, 0, 0, 7); ctx.fill();
+        }
+        const glow = 0.6 + 0.4 * Math.sin(this.t * 3);
+        ctx.fillStyle = `rgba(255,180,80,${glow * 0.6})`;
+        ctx.beginPath(); ctx.arc(px, py - 2, 8 + glow * 3, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ffe090';
+        ctx.beginPath(); ctx.arc(px, py - 3, 3, 0, 7); ctx.fill();
+        // 案内
+        ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText('休憩(全回復)', px, py - 20);
+        ctx.fillStyle = '#7ee0a3'; ctx.fillText('休憩(全回復)', px, py - 21);
+        ctx.textAlign = 'left';
+      } };
     if (p.type === 'portal') return { ...base, r: 14,
       interact() {
         if (p.cond && !G.quests.conds[p.cond]()) { G.ui.toast(p.msg || '反応しない…'); return; }

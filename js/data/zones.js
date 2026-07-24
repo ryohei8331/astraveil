@@ -46,6 +46,7 @@
       props: [
         { type: 'board', x: 14, y: 7 },
         { type: 'sign', x: 21, y: 9, text: '東: アルバ平原 — 初心者はまずぷるぷる狩りから' },
+        { type: 'rest', x: 18, y: 12 }, // 泉の隣に焚き火(無料で全回復)
       ],
       exits: [{ x: 23, y: 7, w: 1, h: 3, to: 'alba_field', tx: 1, ty: 13 }],
     };
@@ -169,6 +170,7 @@
       props: [
         { type: 'board', x: 14, y: 7 },
         { type: 'sign', x: 10, y: 2, text: '北: 千枝の樹海(迷いの森) / 東: 水晶巣崖 / 西: 跳ねる森' },
+        { type: 'rest', x: 14, y: 13 },
       ],
       exits: [
         { x: 0, y: 7, w: 1, h: 3, to: 'hane_forest', tx: 36, ty: 13 },
@@ -319,6 +321,7 @@
       props: [
         { type: 'board', x: 14, y: 7 },
         { type: 'sign', x: 10, y: 2, text: '西: 水晶巣崖 / 東: 港湾都市クインシア(街道崩落中)' },
+        { type: 'rest', x: 14, y: 13 },
       ],
       exits: [
         { x: 0, y: 7, w: 1, h: 3, to: 'crystal_cliff', tx: 34, ty: 13 },
@@ -349,6 +352,7 @@
       props: [
         { type: 'board', x: 12, y: 7 },
         { type: 'sign', x: 22, y: 10, text: '桟橋の先——深く、暗い海。時折、巨大な影が横切るという。' },
+        { type: 'rest', x: 14, y: 10 },
       ],
       exits: [{ x: 0, y: 7, w: 1, h: 3, to: 'terce_town', tx: 22, ty: 8 }],
     };

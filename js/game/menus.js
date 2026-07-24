@@ -12,6 +12,24 @@ G.menus = (() => {
     G.game.popMode(['menu', 'shop', 'board'].includes(m) ? m : undefined);
   };
   const openShop = npcDef => { S.shopNpc = npcDef; S.shopMode = 'buy'; S.page = 0; G.game.pushMode('shop'); G.audio.sfx('open'); };
+  const openItemDetail = id => {
+    const it = G.DATA.items[id]; if (!it) return;
+    const info = [];
+    if (it.atk) info.push(`攻撃力+${it.atk}`);
+    if (it.defense) info.push(`防御+${it.defense}`);
+    if (it.hp) info.push(`HP回復+${it.hp}`);
+    if (it.mp) info.push(`MP回復+${it.mp}`);
+    if (it.hunger) info.push(`満腹度+${it.hunger}`);
+    if (it.mods) for (const k in it.mods) info.push(`${k}+${it.mods[k]}`);
+    const doIt = () => G.Items.use(id);
+    const btnLabel = ['weapon', 'armor', 'acc'].includes(it.type) ? '装備する' : '使う';
+    const usable = ['food', 'potion', 'scroll', 'tome', 'weapon', 'armor', 'acc'].includes(it.type);
+    G.dialog.open(`${it.icon || '📦'} ${it.name}`, [
+      it.desc || '',
+      info.length ? '効果: ' + info.join(' / ') : '(素材/売却用)',
+      usable ? `→ 「${btnLabel}」を実行しますか?(ダイアログを進めると実行)` : '(このアイテムは行動に使えません)',
+    ], usable ? doIt : null);
+  };
   const openBoard = () => { S.boardTab = 'posts'; S.boardPage = 0; G.game.pushMode('board'); };
 
   // ---- 描画部品 ----
@@ -110,24 +128,29 @@ G.menus = (() => {
         ctx.fillStyle = '#7ee0a3'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
         ctx.fillText(`目の前に ${nearNpc.def.name} — 「贈る」で好感度が上がる(好物なら大幅に)`, px + 200, cy);
       }
-      const per = 7, pg = pager(ctx, px, py, pw, ph, entries.length, per);
+      // 行の高さと操作ボタンを大幅拡大(iPhoneでも確実に押せる)
+      const rowH = 66;
+      const per = Math.max(4, Math.floor((ph - 130) / rowH));
+      const pg = pager(ctx, px, py, pw, ph, entries.length, per);
       entries.slice(pg * per, pg * per + per).forEach(([id, qty], i) => {
         const it = G.DATA.items[id];
         if (!it) return;
-        const y = cy + 14 + i * 56;
-        ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(px + 12, y, pw - 24, 50);
-        ctx.font = '18px sans-serif'; ctx.fillText(it.icon || '📦', px + 20, y + 30);
-        ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 13px "Hiragino Kaku Gothic ProN", sans-serif';
-        ctx.fillText(`${it.name} ×${qty}`, px + 48, y + 19);
+        const y = cy + 14 + i * rowH;
+        // 行そのものが「詳細」ボタン(タップで説明+使う/装備の大きい確認ダイアログ)
+        btn(ctx, px + 12, y, pw - 194, rowH - 6, '', () => openItemDetail(id), { active: false, size: 12 });
+        ctx.font = '22px sans-serif'; ctx.fillText(it.icon || '📦', px + 22, y + 36);
+        ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 14px "Hiragino Kaku Gothic ProN", sans-serif';
+        ctx.fillText(`${it.name} ×${qty}`, px + 52, y + 22);
         ctx.fillStyle = '#9aa3b2'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';
-        ctx.fillText((it.desc || '').slice(0, 46), px + 48, y + 36);
+        ctx.fillText((it.desc || '').slice(0, 44), px + 52, y + 42);
         const usable = ['food', 'potion', 'scroll', 'tome', 'weapon', 'armor', 'acc'].includes(it.type);
+        // 大きく指で押せるアクションボタン(60幅→86幅×48高)
         if (usable) {
           const label = ['weapon', 'armor', 'acc'].includes(it.type) ? '装備' : '使う';
-          btn(ctx, px + pw - 76, y + 10, 56, 30, label, () => G.Items.use(id), { active: true });
+          btn(ctx, px + pw - 100, y + 6, 86, rowH - 18, label, () => G.Items.use(id), { active: true, bold: true, size: 14 });
         }
         if (nearNpc && G.Social.gift && ['food', 'material', 'potion'].includes(it.type)) {
-          btn(ctx, px + pw - 140, y + 10, 56, 30, '贈る', () => G.Social.gift(nearNpc, id));
+          btn(ctx, px + pw - 190, y + 6, 86, rowH - 18, '贈る', () => G.Social.gift(nearNpc, id), { size: 12 });
         }
       });
       if (!entries.length) { ctx.fillStyle = '#9aa3b2'; ctx.fillText('(何も持っていない)', px + 20, cy + 40); }

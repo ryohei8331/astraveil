@@ -183,6 +183,13 @@ G.world = (() => {
         if (d.p < 0.2 && G.Growth) G.Growth.note('lucky_drops'); // レア枠を引き当てた
       }
     }
+    // 共通ドロップ: 低確率で小回復薬・食料(補給難対策)
+    if (!def.boss && !def.unique) {
+      if (G.U.chance(0.08 * luc)) dropPickup(e.x, e.y, 'potion_s', 1);
+      if (G.U.chance(0.06 * luc)) dropPickup(e.x, e.y, 'bread', 1);
+      // ピンチ時ボーナス: HPが30%以下なら回復薬確率2倍
+      if (G.player.hp / G.player.hpMax < 0.3 && G.U.chance(0.10 * luc)) dropPickup(e.x, e.y, 'potion_s', 1);
+    }
     G.player.gainExp(def.exp || 1);
     if (G.Growth) G.Growth.onKill(e);
     G.quests.fire('kill', { id: e.defId, e });
