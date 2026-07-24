@@ -66,10 +66,11 @@ G.menus = (() => {
     const pages = Math.max(1, Math.ceil(total / per));
     if (S.page >= pages) S.page = pages - 1;
     if (pages > 1) {
-      btn(ctx, px + pw / 2 - 70, py + ph - 40, 40, 26, '◀', () => { S.page = (S.page + pages - 1) % pages; G.audio.sfx('ui'); });
-      btn(ctx, px + pw / 2 + 30, py + ph - 40, 40, 26, '▶', () => { S.page = (S.page + 1) % pages; G.audio.sfx('ui'); });
-      ctx.fillStyle = '#9aa3b2'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(`${S.page + 1}/${pages}`, px + pw / 2, py + ph - 22);
+      // 指で確実に押せる大きなページ送りボタン
+      btn(ctx, px + pw / 2 - 110, py + ph - 52, 80, 42, '◀ 前', () => { S.page = (S.page + pages - 1) % pages; G.audio.sfx('ui'); }, { bold: true, size: 14 });
+      btn(ctx, px + pw / 2 + 30, py + ph - 52, 80, 42, '次 ▶', () => { S.page = (S.page + 1) % pages; G.audio.sfx('ui'); }, { bold: true, size: 14 });
+      ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`${S.page + 1} / ${pages} ページ`, px + pw / 2, py + ph - 26);
       ctx.textAlign = 'left';
     }
     return S.page;
@@ -244,7 +245,7 @@ G.menus = (() => {
 
     if (S.tab === 'skills') {
       ctx.fillStyle = '#9aa3b2'; ctx.font = '11px sans-serif';
-      ctx.fillText(`修得 ${p.skillsKnown.length}/${p.maxSkills}(上限はTECで拡張) — スキルを選び、セット先スロットを押す`, px + 16, cy);
+      ctx.fillText(`修得スキル ${p.skillsKnown.length}個 — スキル書はいつでも読める。ホットバーは4スロット(セット→スロットの順で押す)`, px + 16, cy);
       // ホットバー
       for (let i = 0; i < 4; i++) {
         const x = px + 16 + i * 56;
@@ -260,19 +261,26 @@ G.menus = (() => {
         ctx.fillStyle = '#7ee0a3'; ctx.font = '11px sans-serif';
         ctx.fillText(`セット中: ${G.DATA.skills[S.assign].name} → スロットを選択`, px + 250, cy + 36);
       }
-      const per = 5, pg = pager(ctx, px, py, pw, ph, p.skillsKnown.length, per);
+      // パネル高さに応じて可変(iPhoneでも見切れないように)
+      const rowH = 56;
+      const per = Math.max(4, Math.floor((ph - 190) / rowH));
+      const pg = pager(ctx, px, py, pw, ph, p.skillsKnown.length, per);
       p.skillsKnown.slice(pg * per, pg * per + per).forEach((id, i) => {
         const sk = G.DATA.skills[id];
-        const y = cy + 62 + i * 62;
-        ctx.fillStyle = p.hotbar.includes(id) ? 'rgba(148,236,216,.08)' : 'rgba(255,255,255,.05)';
-        ctx.fillRect(px + 12, y, pw - 24, 56);
-        ctx.font = '20px sans-serif'; ctx.fillText(sk.icon, px + 20, y + 32);
+        const y = cy + 62 + i * rowH;
+        ctx.fillStyle = p.hotbar.includes(id) ? 'rgba(148,236,216,.10)' : 'rgba(255,255,255,.05)';
+        ctx.fillRect(px + 12, y, pw - 24, rowH - 6);
+        ctx.font = '22px sans-serif'; ctx.fillText(sk.icon, px + 22, y + 30);
         ctx.fillStyle = '#eef2f8'; ctx.font = 'bold 13px "Hiragino Kaku Gothic ProN", sans-serif';
-        ctx.fillText(`${sk.name} ${sk.type === 'passive' ? '【パッシブ】' : ''}`, px + 52, y + 20);
+        ctx.fillText(`${sk.name} ${sk.type === 'passive' ? '【パッシブ】' : ''}${p.hotbar.includes(id) ? ' ⚡セット中' : ''}`, px + 54, y + 18);
         ctx.fillStyle = '#9aa3b2'; ctx.font = '10px "Hiragino Kaku Gothic ProN", sans-serif';
-        G.ui.wrapText(ctx, sk.desc, px + 52, y + 36, pw - 160, 13);
-        btn(ctx, px + pw - 80, y + 13, 60, 30, 'セット', () => { S.assign = id; G.audio.sfx('ui'); }, { active: S.assign === id });
+        G.ui.wrapText(ctx, sk.desc, px + 54, y + 33, pw - 180, 12);
+        btn(ctx, px + pw - 96, y + 8, 80, rowH - 22, 'セット', () => { S.assign = id; G.audio.sfx('ui'); }, { active: S.assign === id, bold: true, size: 13 });
       });
+      if (!p.skillsKnown.length) {
+        ctx.fillStyle = '#9aa3b2'; ctx.font = '11px sans-serif';
+        ctx.fillText('(まだスキルを覚えていない。ショップや宝箱、クエスト報酬で「スキル書」を入手してください)', px + 20, cy + 90);
+      }
     }
 
     if (S.tab === 'quests') {

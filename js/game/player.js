@@ -45,7 +45,8 @@ G.Player = (() => {
       get hpMax() { return 100 + (this.level - 1) * 14 + this.stats.VIT * 5; },
       get mpMax() { return 40 + (this.level - 1) * 7 + this.stats.TEC * 3; },
       get stmMax() { return 100 + this.stats.AGI * 2 + this.stats.VIT; },
-      get maxSkills() { return 6 + Math.floor(this.stats.TEC / 8); }, // TEC=修得上限(仕様)
+      // スキル修得は制限なし(4スロットのホットバー枠が実質的な選択制約)。TECは表示上の目安
+      get maxSkills() { return 999; },
       get canClimb() { return this.hotbar.includes('kabegake') && this.stm > 5; },
       get waterWalk() { return this.hasBuff('antigrav'); },
 
