@@ -903,7 +903,8 @@ G.Enemy = (() => {
       ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText('🍖', px, py - S - 20 + bob);
       ctx.fillStyle = '#ffd75e'; ctx.font = '9px sans-serif';
-      ctx.fillText('E: 食料を与える', px, py - S - 32);
+      const cue = G.input.touchMode ? '🔍調べる で食料を渡す' : 'E: 食料を与える';
+      ctx.fillText(cue, px, py - S - 32);
       ctx.textAlign = 'left';
     }
     // HPバー

@@ -114,7 +114,7 @@ G.NPC = (() => {
       interact() {
         if (this.cond && !G.quests.conds[this.cond]()) return;
         if (G.quests.flags[p.flagId]) { G.ui.toast('もう掘り返した跡だ'); return; }
-        if (!G.Items.count('shovel')) { G.ui.toast('地面が不自然に盛り上がっている…スコップがあれば掘れそうだ'); return; }
+        if (!G.Items.count('shovel')) { G.ui.toast('スコップが要る…アルバの街「雑貨屋バルド」で800ステラで買える'); return; }
         G.audio.sfx('dig'); G.fx.burst(this.x, this.y, '#8a6a45', 14, 90); G.fx.shake(2);
         if (G.Growth) G.Growth.note('digs');
         G.quests.flags[p.flagId] = true;
@@ -126,10 +126,27 @@ G.NPC = (() => {
         const px = this.x - cam.x, py = this.y - cam.y;
         if (G.quests.flags[p.flagId]) {
           ctx.fillStyle = 'rgba(60,45,30,.7)'; ctx.beginPath(); ctx.ellipse(px, py, 12, 6, 0, 0, 7); ctx.fill();
-        } else {
-          ctx.fillStyle = '#7a6547'; ctx.beginPath(); ctx.ellipse(px, py, 11, 5.5, 0, 0, 7); ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.beginPath(); ctx.ellipse(px - 2, py - 1.5, 5, 2.5, 0, 0, 7); ctx.fill();
+          return;
         }
+        // 掘れそうな土(明るくハイライト+ゆらぎ)
+        const glow = 0.5 + 0.5 * Math.sin(this.t * 3);
+        ctx.fillStyle = `rgba(255,215,120,${0.15 + glow * 0.25})`;
+        ctx.beginPath(); ctx.ellipse(px, py, 16, 8, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#7a6547';
+        ctx.beginPath(); ctx.ellipse(px, py, 11, 5.5, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.15)';
+        ctx.beginPath(); ctx.ellipse(px - 2, py - 1.5, 5, 2.5, 0, 0, 7); ctx.fill();
+        // 案内(スコップの有無で文言変化)
+        const has = G.Items.count('shovel') > 0;
+        const cue = G.input.touchMode ? '🔍調べる' : 'E';
+        const msg = has ? `${cue} で掘る ⛏` : `⛏ スコップが要る…`;
+        ctx.font = 'bold 10px "Hiragino Kaku Gothic ProN", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+        ctx.strokeText(msg, px, py - 12);
+        ctx.fillStyle = has ? '#ffd75e' : '#a08b6a';
+        ctx.fillText(msg, px, py - 12);
+        ctx.textAlign = 'left';
       } };
     if (p.type === 'board') return { ...base, r: 14,
       interact() { G.audio.sfx('open'); G.menus.openBoard(); },
@@ -173,7 +190,7 @@ G.NPC = (() => {
         ctx.fillStyle = '#7ee0a3'; ctx.fillText('休憩(全回復)', px, py - 21);
         ctx.textAlign = 'left';
       } };
-    if (p.type === 'portal') return { ...base, r: 14,
+    if (p.type === 'portal') return { ...base, r: 18,
       interact() {
         if (p.cond && !G.quests.conds[p.cond]()) { G.ui.toast(p.msg || '反応しない…'); return; }
         G.audio.sfx('warp');
@@ -182,10 +199,34 @@ G.NPC = (() => {
       draw(ctx, cam) {
         const px = this.x - cam.x, py = this.y - cam.y;
         const on = !p.cond || G.quests.conds[p.cond]();
-        ctx.strokeStyle = on ? `rgba(148,236,216,${0.6 + 0.3 * Math.sin(this.t * 3)})` : 'rgba(120,120,140,.4)';
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.ellipse(px, py - 12, 10, 16, 0, 0, 7); ctx.stroke();
-        if (on) { ctx.fillStyle = 'rgba(148,236,216,.2)'; ctx.beginPath(); ctx.ellipse(px, py - 12, 7, 12, 0, 0, 7); ctx.fill(); }
+        // 大きな渦巻き+光る柱で「ここが出口」を強調
+        ctx.save();
+        if (on) {
+          // 発光の柱
+          ctx.globalCompositeOperation = 'lighter';
+          const glow = 0.55 + 0.25 * Math.sin(this.t * 3);
+          const g = ctx.createRadialGradient(px, py - 20, 2, px, py - 20, 44);
+          g.addColorStop(0, `rgba(148,236,216,${glow})`); g.addColorStop(1, 'rgba(148,236,216,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(px, py - 20, 44, 0, 7); ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        // 渦本体
+        ctx.strokeStyle = on ? `rgba(148,236,216,${0.75 + 0.25 * Math.sin(this.t * 3)})` : 'rgba(120,120,140,.5)';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.ellipse(px, py - 14, 14, 22, 0, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(px, py - 14, 9, 15, 0, 0, 7); ctx.stroke();
+        if (on) { ctx.fillStyle = 'rgba(148,236,216,.3)'; ctx.beginPath(); ctx.ellipse(px, py - 14, 8, 13, 0, 0, 7); ctx.fill(); }
+        // ラベル: どこへ・入れるか
+        const zn = G.DATA.zones[p.to];
+        const label = on ? (zn ? `🌀 ${zn.name} へ` : '🌀 出口') : `🔒 ${(zn && zn.name) || '???'}`;
+        ctx.font = 'bold 11px "Hiragino Kaku Gothic ProN", sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)';
+        ctx.strokeText(label, px, py - 40);
+        ctx.fillStyle = on ? '#94ecd8' : '#9aa3b2';
+        ctx.fillText(label, px, py - 40);
+        ctx.textAlign = 'left';
+        ctx.restore();
       } };
     return null;
   };

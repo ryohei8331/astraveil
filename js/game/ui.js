@@ -403,14 +403,17 @@ G.ui = (() => {
         ctx.fillText('1-4:スキル  M:メニュー(地図/セーブ)  H:SOS', w - 16, h - 16);
         ctx.textAlign = 'left';
       }
-      // 「?」ボタン(いつでも操作説明)※プレイ中のみ判定登録(メニューの裏で反応しないように)
-      const qx = w - 26, qy = 78;
-      ctx.fillStyle = 'rgba(12,16,26,.75)';
-      ctx.beginPath(); ctx.arc(qx, qy, 13, 0, 7); ctx.fill();
-      ctx.strokeStyle = 'rgba(148,236,216,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('?', qx, qy + 5); ctx.textAlign = 'left';
-      if (G.game.mode === 'play') addClick(qx - 16, qy - 16, 32, 32, () => G.ui.openManual());
+      // 「?」ボタン: タッチモードだとメニューボタン(☰)と重なるので、PC時のみ表示
+      // (タッチではメニュー→システム→操作マニュアルから呼べる)
+      if (!G.input.touchMode) {
+        const qx = w - 26, qy = 78;
+        ctx.fillStyle = 'rgba(12,16,26,.75)';
+        ctx.beginPath(); ctx.arc(qx, qy, 13, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(148,236,216,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('?', qx, qy + 5); ctx.textAlign = 'left';
+        if (G.game.mode === 'play') addClick(qx - 16, qy - 16, 32, 32, () => G.ui.openManual());
+      }
       // ホットバー・属性玉もクリックで使える(直感操作)
       if (G.game.mode === 'play' && !G.input.touchMode) {
         const hbY2 = h - 54, slotW2 = 40, hbX2 = w / 2 - slotW2 * 2 - 30;
