@@ -499,43 +499,110 @@ G.ui = (() => {
     ctx.restore();
   };
 
+  // ボタン色: 攻撃=赤 / 回避=水色 / 魔法=紫 / 調べる=金 / スキル=青 / メニュー=灰
+  const BTN_COLOR = {
+    attack: { fill: '#e04a4a', ring: '#ffb0b0', label: '攻撃' },
+    dodge: { fill: '#3aa0d0', ring: '#a0e0f8', label: '回避' },
+    magic: { fill: '#8060c8', ring: '#c8b0f0', label: '魔法' },
+    interact: { fill: '#c89838', ring: '#ffe0a0', label: '調べる' },
+    menu: { fill: '#4a5568', ring: '#c8d0dc', label: 'メニュー' },
+    skill1: { fill: '#3a5c78', ring: '#a0c0d8', label: '1' },
+    skill2: { fill: '#3a5c78', ring: '#a0c0d8', label: '2' },
+    skill3: { fill: '#3a5c78', ring: '#a0c0d8', label: '3' },
+    skill4: { fill: '#3a5c78', ring: '#a0c0d8', label: '4' },
+  };
   const drawTouch = (ctx, w, h) => {
     ctx.save();
-    // スティック
+    // 左半分「移動」ヒント(初回のみ薄く、スティック未使用時)
     const st = G.input.stick;
-    if (st) {
-      ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(st.ox, st.oy, 40, 0, 7); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,.35)';
-      const dx = G.U.clamp(st.x - st.ox, -40, 40), dy = G.U.clamp(st.y - st.oy, -40, 40);
-      ctx.beginPath(); ctx.arc(st.ox + dx, st.oy + dy, 18, 0, 7); ctx.fill();
+    if (!st && G.player && !G.player.tutorDone) {
+      const cx = w * 0.20, cy = h * 0.65;
+      ctx.fillStyle = 'rgba(255,255,255,.06)';
+      ctx.beginPath(); ctx.arc(cx, cy, 70, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, 60, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = 'bold 14px "Hiragino Kaku Gothic ProN", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('◀ 移動 ▶', cx, cy - 4);
+      ctx.font = '10px sans-serif';
+      ctx.fillText('左側をドラッグ', cx, cy + 14);
+      ctx.textAlign = 'left';
     }
-    // ボタン
+    // スティック
+    if (st) {
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(st.ox, st.oy, 44, 0, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      const dx = G.U.clamp(st.x - st.ox, -44, 44), dy = G.U.clamp(st.y - st.oy, -44, 44);
+      ctx.beginPath(); ctx.arc(st.ox + dx, st.oy + dy, 22, 0, 7); ctx.fill();
+    }
+    // ボタン(はっきり見える色付き)
     const p = G.player;
     for (const b of G.input.touchButtons) {
-      ctx.fillStyle = 'rgba(12,16,26,.55)';
+      const c = BTN_COLOR[b.action] || { fill: '#4a5568', ring: '#c8d0dc', label: b.label };
+      const pressed = G.input.held(b.action) || (b.heldId !== undefined);
+      // 影(接地感)
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      ctx.beginPath(); ctx.arc(b.x + 2, b.y + 3, b.r, 0, 7); ctx.fill();
+      // 本体(グラデーション)
+      const grad = ctx.createRadialGradient(b.x - b.r * 0.35, b.y - b.r * 0.4, 1, b.x, b.y, b.r);
+      const bright = pressed ? 1.2 : 1;
+      grad.addColorStop(0, shadeCol(c.fill, 0.32 * bright));
+      grad.addColorStop(1, shadeCol(c.fill, -0.10 / bright));
+      ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
-      ctx.strokeStyle = 'rgba(148,236,216,.4)'; ctx.lineWidth = 1.5; ctx.stroke();
+      // 外周ハイライト
+      ctx.strokeStyle = pressed ? '#ffffff' : c.ring; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.stroke();
+      // アイコン+ラベル
       if (b.action.startsWith('skill')) {
         const idx = +b.action.slice(5) - 1;
         const id = p.hotbar[idx];
+        ctx.textAlign = 'center';
         if (id) {
           const sk = G.DATA.skills[id];
-          ctx.font = `${b.r}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText(sk.icon, b.x, b.y + b.r * 0.35);
+          ctx.font = `${b.r * 0.9}px sans-serif`;
+          ctx.fillStyle = '#fff';
+          ctx.fillText(sk.icon, b.x, b.y + b.r * 0.32);
           const cd = p.cooldowns[id];
           if (cd > 0) {
-            ctx.fillStyle = 'rgba(0,0,0,.6)';
+            ctx.fillStyle = 'rgba(0,0,0,.65)';
             ctx.beginPath(); ctx.arc(b.x, b.y, b.r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (cd / (sk.cd || 1))); ctx.lineTo(b.x, b.y); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
+            ctx.fillText(Math.ceil(cd), b.x, b.y + 4);
           }
+        } else {
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,.55)';
+          ctx.fillText(c.label, b.x, b.y + 5);
+          ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.font = '8px sans-serif';
+          ctx.fillText('(空)', b.x, b.y + b.r * 0.75);
         }
       } else {
-        ctx.font = `${b.r * 0.9}px sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText(b.label, b.x, b.y + b.r * 0.32);
+        ctx.textAlign = 'center';
+        // 大きな絵文字/シンボル
+        ctx.font = `bold ${b.r * 0.85}px sans-serif`;
+        ctx.fillStyle = '#fff';
+        // strokeで縁取り(視認性)
+        ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.strokeText(b.label, b.x, b.y + b.r * 0.28);
+        ctx.fillText(b.label, b.x, b.y + b.r * 0.28);
+        // 下に日本語ラベル
+        ctx.font = 'bold 10px "Hiragino Kaku Gothic ProN", sans-serif';
+        ctx.strokeText(c.label, b.x, b.y + b.r + 12);
+        ctx.fillText(c.label, b.x, b.y + b.r + 12);
       }
       ctx.textAlign = 'left';
     }
     ctx.restore();
+  };
+  const shadeCol = (hex, f) => {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+    else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+    return `rgb(${Math.min(255, r) | 0},${Math.min(255, g) | 0},${Math.min(255, b) | 0})`;
   };
 
   // 世界変化オーバーレイ
