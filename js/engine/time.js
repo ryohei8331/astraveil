@@ -34,8 +34,28 @@ G.time = (() => {
     S.t = Math.floor(S.t / DAY_LEN + 1) * DAY_LEN + DAY_LEN * 0.30;
     S.day++;
   };
+  // 指定した「1日の何分位(0..1)」まで時間を進める。今より前なら翌日の同時刻へ。
+  const advanceToTimeOfDay = frac01 => {
+    const curDayStart = Math.floor(S.t / DAY_LEN) * DAY_LEN;
+    let target = curDayStart + DAY_LEN * frac01;
+    while (target <= S.t + 1) { target += DAY_LEN; S.day++; }
+    S.t = target;
+  };
+  // 指定月齢(0=新月, 4=満月)かつ夜になるまで進める(最大8日)
+  const advanceToMoonNight = phase => {
+    for (let i = 0; i < 8; i++) {
+      if (((S.day - 1) % 8) === phase) { advanceToTimeOfDay(0.92); return; } // 夜へ
+      advanceToMorning();
+    }
+  };
+  // 次の夜まで(今夜が可能ならそのまま今夜21時、遠ければ今夜21時)
+  const advanceToNextNight = () => advanceToTimeOfDay(0.92);
+  // 次の朝(次の日の朝)
+  const advanceToNextMorning = advanceToMorning;
   const save = () => ({ t: S.t, day: S.day });
   const load = d => { if (d) { S.t = d.t; S.day = d.day; } };
   const reset = () => { S.t = DAY_LEN * 0.30; S.day = 1; };
-  return { S, DAY_LEN, frac, isNight, moonPhase, isFullMoon, moonName, clock, darkness, update, advanceToMorning, save, load, reset };
+  return { S, DAY_LEN, frac, isNight, moonPhase, isFullMoon, moonName, clock, darkness, update,
+    advanceToMorning, advanceToTimeOfDay, advanceToMoonNight, advanceToNextNight, advanceToNextMorning,
+    save, load, reset };
 })();

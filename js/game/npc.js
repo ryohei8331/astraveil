@@ -192,7 +192,45 @@ G.NPC = (() => {
       } };
     if (p.type === 'portal') return { ...base, r: 18,
       interact() {
-        if (p.cond && !G.quests.conds[p.cond]()) { G.ui.toast(p.msg || '反応しない…'); return; }
+        if (p.cond && !G.quests.conds[p.cond]()) {
+          const zn = G.DATA.zones[p.to];
+          const dest = zn ? zn.name : '???';
+          const CONDHINT = {
+            lunaria: [
+              '解放条件: EX『月兎抄(エピック・オブ・ルナハレ)』を達成する',
+              'ヒント: 満月の夜×秘園(樹海の月門の先)×完全な素手で「遠環(Towa)」と対話 → Ω機関を掘って届ける',
+            ],
+            fullMoonNight: ['解放条件: 満月の夜(宿屋で「次の満月の夜まで」)'],
+            night: ['解放条件: 夜(宿屋で「次の夜まで待つ」)'],
+            starsteel: ['解放条件: 星鋼の遺構でボス「カガチ丸」を討つ(starsteel_open)'],
+            orochiDead: ['解放条件: 森の主(オロチ級)を討つ'],
+            dragonGate: [
+              '解放条件: 星鋼の遺構クリア + EX『月兎抄』達成(=ルナリア開通)',
+              '順路: 星鋼を先に、次にルナリア。両方満たすと月光の橋が架かる',
+            ],
+            abyssGate: [
+              '解放条件: 深淵クエスト(q_abyss)クリア + 天冠のソルドレイクとの盟約(dragon_pact)',
+            ],
+            archiveGate: (() => {
+              const f = G.quests.flags, mark = ok => ok ? '✅' : '⬜';
+              return [
+                '解放条件: 「六つの記録」すべて + 新月の夜',
+                `${mark(f.fenreed_met)} 1. 宵闇のフェンリードに遭遇(呪印保持)`,
+                `${mark(f.starsteel_open)} 2. 星鋼の遺構開放(カガチ丸)`,
+                `${mark(f.dragon_pact)} 3. 天冠ソルドレイクとの盟約`,
+                `${mark(f.abyss_open)} 4. 深淵開放(ヨグリム)`,
+                `${mark(f.attunement)} 5. 世界の調律(カンタービレ)`,
+                `${mark(f.kagami_slain)} 6. 無貌のカガミ討伐`,
+                '揃ったら宿屋で「次の新月の夜まで」を選び、廟の紋様を再度調べる',
+              ];
+            })(),
+          };
+          const extra = CONDHINT[p.cond] || [];
+          const lines = [`門は閉ざされている——目的地: ${dest}`, p.msg || '反応しない…', ...extra];
+          if (p.hint) lines.push(...(Array.isArray(p.hint) ? p.hint : [p.hint]));
+          G.dialog.open('封じられた門', lines);
+          return;
+        }
         G.audio.sfx('warp');
         G.game.changeZone(p.to, p.tx, p.ty);
       },

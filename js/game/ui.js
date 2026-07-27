@@ -69,7 +69,10 @@ G.ui = (() => {
   const handleTap = (x, y) => {
     // 世界変化オーバーレイ: どこでもタップで閉じる
     if (G.game.mode === 'worldchange') { dismissWorldChange(); return true; }
-    if (G.game.mode === 'dialog') { G.dialog.advance(); return true; }
+    if (G.game.mode === 'dialog') {
+      if (G.dialog.handleTap && G.dialog.handleTap(x, y)) return true; // 選択肢が消費
+      G.dialog.advance(); return true;
+    }
     // 後に描いた(=上に見えている)ボタンを優先
     for (let i = S.clickables.length - 1; i >= 0; i--) {
       const c = S.clickables[i];

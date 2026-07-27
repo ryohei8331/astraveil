@@ -305,6 +305,35 @@ G.menus = (() => {
         y += 66;
       }
       y += 10;
+      // ---- 七凶星・世界フラグの進捗(隠しシナリオの手がかり) ----
+      const f = G.quests.flags;
+      const mark = ok => ok ? '✅' : '⬜';
+      ctx.fillStyle = '#c9a0ff'; ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('七凶星の記録(六つの記録+新月の夜で最終層が開く)', px + 16, y); y += 6;
+      const records = [
+        ['宵闇のフェンリード遭遇(呪印保持で夜のメンハ夜森)', f.fenreed_met],
+        ['星鋼の遺構開放(カガチ丸を討つ)', f.starsteel_open],
+        ['天冠ソルドレイクとの盟約(dragon_pact)', f.dragon_pact],
+        ['深淵開放・ヨグリム(abyss_open)', f.abyss_open],
+        ['世界の調律・カンタービレ(attunement)', f.attunement],
+        ['無貌のカガミ討伐(kagami_slain)', f.kagami_slain],
+      ];
+      ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';
+      for (const [name, ok] of records) {
+        ctx.fillStyle = ok ? '#7ee0a3' : '#9aa3b2';
+        ctx.fillText(`  ${mark(ok)} ${name}`, px + 20, y + 14); y += 16;
+      }
+      const done = records.filter(r => r[1]).length;
+      const moonOK = G.time.moonPhase() === 0 && G.time.isNight();
+      ctx.fillStyle = done >= 6 ? (moonOK ? '#ffd75e' : '#c9a0ff') : '#9aa3b2';
+      ctx.fillText(`  現在: ${done}/6 記録 ・ 月齢${G.time.moonName()} / ${G.time.isNight() ? '夜' : '昼'}`, px + 20, y + 14);
+      y += 20;
+      if (done >= 6 && !moonOK) {
+        ctx.fillStyle = '#ffd75e';
+        ctx.fillText('  → 宿屋で「次の新月の夜まで」を選び、遺構の廟(x17,y21付近)で調べる', px + 20, y + 14);
+        y += 16;
+      }
+      y += 6;
       ctx.fillStyle = '#94ecd8'; ctx.font = 'bold 13px sans-serif';
       ctx.fillText('達成済み', px + 16, y); y += 8;
       ctx.fillStyle = '#9aa3b2'; ctx.font = '11px "Hiragino Kaku Gothic ProN", sans-serif';

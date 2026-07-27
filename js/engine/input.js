@@ -110,6 +110,7 @@ G.input = (() => {
       e.preventDefault(); touchMode = true; G.audio.ensure();
       for (const t of e.changedTouches) {
         const p = tpos(t);
+        mouse.x = p.x; mouse.y = p.y; // 共通ポインタ位置(ダイアログ選択肢等が読む)
         // メニュー/UI側のタップ処理を先に(UIが開いているとき)
         if (G.ui && G.ui.handleTap && G.ui.handleTap(p.x, p.y)) continue;
         const b = findBtn(p.x, p.y);

@@ -9,20 +9,30 @@
     name, look,
     onTalk(npc, p) {
       const disc = G.Social ? G.Social.discount(npc.id) : 1;
-      const cost = Math.round(price * disc);
-      G.dialog.open(name, [
-        `いらっしゃい。一晩 ${cost}ステラ${disc < 1 ? '(なじみ割引済み)' : ''}だよ。泊まっていくかい?`,
-        '(泊まると朝まで時間が進み、HP・MP・スタミナ・満腹度が全回復する)',
-      ], () => {
+      const restCost = Math.round(price * disc);
+      const waitCost = Math.max(5, Math.round(restCost * 0.3)); // 時間潰しは激安
+      const doStay = (advanceFn, label, cost, fullHeal) => {
         if (p.stella < cost) { G.ui.toast('ステラが足りない…'); return; }
         p.stella -= cost;
         if (G.Social) G.Social.onInn(npc.id);
-        G.time.advanceToMorning();
-        p.hp = p.hpMax; p.mp = p.mpMax; p.stm = p.stmMax; p.hunger = 100; p.statusEf = {};
+        advanceFn();
+        if (fullHeal) { p.hp = p.hpMax; p.mp = p.mpMax; p.stm = p.stmMax; p.hunger = 100; p.statusEf = {}; }
         G.audio.sfx('heal');
-        G.ui.banner(`${G.time.S.day}日目の朝 — よく眠れた(月齢: ${G.time.moonName()})`);
+        G.ui.banner(`${label} — ${G.time.S.day}日目 ${G.time.clock()}(月齢: ${G.time.moonName()}${G.time.isNight() ? ' / 夜' : ''})`);
         G.save.save('auto');
-      });
+      };
+      G.dialog.openChoice ? G.dialog.openChoice(name, [
+        `いらっしゃい。今 ${G.time.S.day}日目 ${G.time.clock()}、月齢は${G.time.moonName()}だよ。何時まで過ごす?`,
+      ], [
+        { label: `🛏 朝まで泊まる(${restCost}st・全回復)`, fn: () => doStay(() => G.time.advanceToNextMorning(), '朝まで眠った', restCost, true) },
+        { label: `🌇 夕方まで待つ(${waitCost}st)`, fn: () => doStay(() => G.time.advanceToTimeOfDay(0.75), '夕方まで待った', waitCost, false) },
+        { label: `🌙 次の夜まで待つ(${waitCost}st)`, fn: () => doStay(() => G.time.advanceToNextNight(), '夜まで待った', waitCost, false) },
+        { label: `🌕 次の「満月の夜」まで(${waitCost * 3}st・全回復)`, fn: () => doStay(() => G.time.advanceToMoonNight(4), '満月の夜になった', waitCost * 3, true) },
+        { label: `🌑 次の「新月の夜」まで(${waitCost * 3}st・全回復)`, fn: () => doStay(() => G.time.advanceToMoonNight(0), '新月の夜になった', waitCost * 3, true) },
+        { label: 'やめる', fn: () => {} },
+      ]) : G.dialog.open(name, [
+        `いらっしゃい。一晩 ${restCost}ステラ${disc < 1 ? '(なじみ割引済み)' : ''}だよ。泊まっていくかい?`,
+      ], () => doStay(() => G.time.advanceToNextMorning(), '朝まで眠った', restCost, true));
     },
   });
 
